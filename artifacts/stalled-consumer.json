@@ -1,0 +1,398 @@
+{
+  "stallSeconds": 10,
+  "durationSeconds": 30,
+  "before": {
+    "t": "2026-09-12T11:29:46.185Z",
+    "level": "info",
+    "component": "generator",
+    "event": "stats",
+    "elapsedSeconds": 9,
+    "emittedFrames": 36020,
+    "emittedValues": 1152640,
+    "deviationFrames": 20,
+    "deviationPpm": 555.556,
+    "tickLagP99UsAtMost": 128,
+    "tickLagMaxUs": 1042.7,
+    "ringFillPct": 0,
+    "ringPeakBlocks": 1,
+    "droppedFrames": 0,
+    "drainStalls": 0,
+    "connected": true,
+    "rssMb": 65.7
+  },
+  "during": [
+    {
+      "t": "2026-09-12T11:29:47.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 10,
+      "emittedFrames": 40020,
+      "emittedValues": 1280640,
+      "deviationFrames": 20,
+      "deviationPpm": 500,
+      "tickLagP99UsAtMost": 128,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 0,
+      "ringPeakBlocks": 1,
+      "droppedFrames": 0,
+      "drainStalls": 0,
+      "connected": true,
+      "rssMb": 65.8
+    },
+    {
+      "t": "2026-09-12T11:29:48.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 11,
+      "emittedFrames": 44020,
+      "emittedValues": 1408640,
+      "deviationFrames": 20,
+      "deviationPpm": 454.545,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 0,
+      "ringPeakBlocks": 1,
+      "droppedFrames": 0,
+      "drainStalls": 0,
+      "connected": true,
+      "rssMb": 65.8
+    },
+    {
+      "t": "2026-09-12T11:29:49.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 12,
+      "emittedFrames": 48020,
+      "emittedValues": 1536640,
+      "deviationFrames": 20,
+      "deviationPpm": 416.667,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 0.2,
+      "ringPeakBlocks": 2,
+      "droppedFrames": 0,
+      "drainStalls": 108,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:50.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 13,
+      "emittedFrames": 52020,
+      "emittedValues": 1664640,
+      "deviationFrames": 20,
+      "deviationPpm": 384.615,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 19.73,
+      "ringPeakBlocks": 202,
+      "droppedFrames": 0,
+      "drainStalls": 23054,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:51.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 14,
+      "emittedFrames": 56020,
+      "emittedValues": 1792640,
+      "deviationFrames": 20,
+      "deviationPpm": 357.143,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 39.26,
+      "ringPeakBlocks": 402,
+      "droppedFrames": 0,
+      "drainStalls": 43075,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:52.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 15,
+      "emittedFrames": 60020,
+      "emittedValues": 1920640,
+      "deviationFrames": 20,
+      "deviationPpm": 333.333,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 58.79,
+      "ringPeakBlocks": 602,
+      "droppedFrames": 0,
+      "drainStalls": 64466,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:53.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 16,
+      "emittedFrames": 64020,
+      "emittedValues": 2048640,
+      "deviationFrames": 20,
+      "deviationPpm": 312.5,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 78.32,
+      "ringPeakBlocks": 802,
+      "droppedFrames": 0,
+      "drainStalls": 90865,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:54.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 17,
+      "emittedFrames": 68020,
+      "emittedValues": 2176640,
+      "deviationFrames": 20,
+      "deviationPpm": 294.118,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 97.85,
+      "ringPeakBlocks": 1002,
+      "droppedFrames": 0,
+      "drainStalls": 112735,
+      "connected": true,
+      "rssMb": 65.9
+    },
+    {
+      "t": "2026-09-12T11:29:55.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 18,
+      "emittedFrames": 72020,
+      "emittedValues": 2304640,
+      "deviationFrames": 20,
+      "deviationPpm": 277.778,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 100,
+      "ringPeakBlocks": 1024,
+      "droppedFrames": 3560,
+      "drainStalls": 134389,
+      "connected": true,
+      "rssMb": 66
+    },
+    {
+      "t": "2026-09-12T11:29:56.185Z",
+      "level": "info",
+      "component": "generator",
+      "event": "stats",
+      "elapsedSeconds": 19,
+      "emittedFrames": 76020,
+      "emittedValues": 2432640,
+      "deviationFrames": 20,
+      "deviationPpm": 263.158,
+      "tickLagP99UsAtMost": 64,
+      "tickLagMaxUs": 1042.7,
+      "ringFillPct": 100,
+      "ringPeakBlocks": 1024,
+      "droppedFrames": 7560,
+      "drainStalls": 153575,
+      "connected": true,
+      "rssMb": 66
+    }
+  ],
+  "pacing": {
+    "rateHz": 4000,
+    "framesPerTick": 20,
+    "tickNanos": 5000000,
+    "elapsedSeconds": 30.000423875,
+    "emittedFrames": 120020,
+    "expectedFrames": 120001,
+    "deviationFrames": 19,
+    "deviationNanos": 4750000,
+    "deviationPpm": 158.332,
+    "lateTicks": 0,
+    "ticks": 6001,
+    "resyncCount": 0,
+    "resyncFrames": 0,
+    "tickLag": {
+      "samples": 5987,
+      "meanUs": 9.8,
+      "p50UsAtMost": 8,
+      "p99UsAtMost": 64,
+      "maxUs": 1042.7
+    },
+    "startTimestampUnixNanos": "1789212577185000000",
+    "startMonotonicNanos": "13898921992750",
+    "channelCount": 32,
+    "sampleRateHz": 4000,
+    "emittedValues": 3840640,
+    "blocksWritten": 5430,
+    "bytesWritten": 14074560,
+    "drainStalls": 172132,
+    "peakWritableLength": 1049760,
+    "ringPeakBlocks": 1024,
+    "ringPeakFillPct": 100,
+    "drops": {
+      "ledgerTruncated": false,
+      "totalDroppedFrames": 11420,
+      "totalDroppedValues": 365440,
+      "entries": [
+        {
+          "startFrameIndex": 47980,
+          "frameCount": 11400,
+          "startValueIndex": 1535360,
+          "valueCount": 364800,
+          "startSeconds": 11.995,
+          "durationSeconds": 2.85,
+          "cause": "GENERATOR_RING_FULL"
+        },
+        {
+          "startFrameIndex": 59400,
+          "frameCount": 20,
+          "startValueIndex": 1900800,
+          "valueCount": 640,
+          "startSeconds": 14.85,
+          "durationSeconds": 0.005,
+          "cause": "GENERATOR_RING_FULL"
+        }
+      ]
+    }
+  },
+  "recorderDrops": {
+    "ledgerTruncated": false,
+    "totalDroppedFrames": 11420,
+    "totalDroppedValues": 365440,
+    "entries": [
+      {
+        "startFrameIndex": 47980,
+        "frameCount": 11400,
+        "startValueIndex": 1535360,
+        "valueCount": 364800,
+        "startSeconds": 11.995,
+        "durationSeconds": 2.85,
+        "cause": "TRANSPORT_GAP"
+      },
+      {
+        "startFrameIndex": 59400,
+        "frameCount": 20,
+        "startValueIndex": 1900800,
+        "valueCount": 640,
+        "startSeconds": 14.85,
+        "durationSeconds": 0.005,
+        "cause": "TRANSPORT_GAP"
+      }
+    ]
+  },
+  "validator": {
+    "file": "/tmp/bench-stall.sigb",
+    "result": "FAIL",
+    "exitCode": 1,
+    "expectedValues": 3475200,
+    "recordedValues": 3475200,
+    "missing": 365440,
+    "duplicated": 0,
+    "incorrect": 0,
+    "corrupt": 0,
+    "finalised": true,
+    "recovered": false,
+    "truncatedAtByte": null,
+    "blocksRead": 29,
+    "blockCount": 29,
+    "firstDiscrepancy": {
+      "missing": {
+        "valueIndex": 1535360,
+        "frameIndex": 47980,
+        "frameCount": 11400,
+        "valueCount": 364800,
+        "timeSeconds": 11.995,
+        "blockIndex": 12
+      },
+      "duplicated": null,
+      "incorrect": null,
+      "corrupt": null
+    },
+    "detail": {
+      "missing": [
+        {
+          "valueIndex": 1535360,
+          "frameIndex": 47980,
+          "frameCount": 11400,
+          "valueCount": 364800,
+          "timeSeconds": 11.995,
+          "blockIndex": 12
+        },
+        {
+          "valueIndex": 1900800,
+          "frameIndex": 59400,
+          "frameCount": 20,
+          "valueCount": 640,
+          "timeSeconds": 14.85,
+          "blockIndex": 13
+        }
+      ],
+      "duplicated": [],
+      "incorrect": [],
+      "corrupt": []
+    },
+    "recorderLedger": [
+      {
+        "startFrameIndex": 47980,
+        "frameCount": 11400,
+        "causeCode": 4,
+        "cause": "TRANSPORT_GAP"
+      },
+      {
+        "startFrameIndex": 59400,
+        "frameCount": 20,
+        "causeCode": 4,
+        "cause": "TRANSPORT_GAP"
+      }
+    ],
+    "crcChecked": true,
+    "elapsedSeconds": 0.063,
+    "throughputValuesPerSecond": 55289414,
+    "peakRssBytes": 57065472
+  },
+  "checks": [
+    [
+      "generator never fell behind (deviation stays within one tick)",
+      true
+    ],
+    [
+      "deviation during the stall stays within one tick",
+      true
+    ],
+    [
+      "no pacing resync was needed",
+      true
+    ],
+    [
+      "every dropped range carries a start position",
+      true
+    ],
+    [
+      "no delivered value was incorrect",
+      true
+    ],
+    [
+      "no value was duplicated",
+      true
+    ],
+    [
+      "recorder and validator agree on the missing count",
+      true
+    ]
+  ]
+}

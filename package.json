@@ -11,7 +11,7 @@
     "sigplay": "bin/sigplay.js"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test-concurrency=1 --test test/*.test.mjs",
     "record": "node bin/recorder.js",
     "generate": "node bin/generator.js",
     "validate": "node bin/sigval.js",

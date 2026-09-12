@@ -45,15 +45,28 @@ function readBlockHeaderSync(fd, hdr, blockIndex, buf) {
  */
 function resolveExtent(fd, hdr, fileSize) {
   const dataBytes = Math.max(0, fileSize - hdr.headerBytes);
-  // Blocks that are physically present in full. A trailer, if any, sits after them; it is smaller
-  // than a block only in the no-drop case, so `full` can overcount by one when a trailer is present.
+  // Every block occupies exactly blockStrideBytes (see writer.js — short blocks are stride-padded),
+  // so the block count is computed, never scanned for. `full` counts blocks whose stride is entirely
+  // within the file; the FINAL block is commonly short and so is not counted here, which the
+  // finalised path below and the recovery loop each handle.
   let full = Math.floor(dataBytes / hdr.blockStrideBytes);
 
   if (hdr.finalised) {
-    // Trust the header, but never beyond what is physically there — a file can be both finalised
-    // and subsequently truncated by a copy that ran out of space.
+    // Trust the header, but never beyond what is physically there: a file can be both finalised and
+    // subsequently truncated by, say, a copy that ran out of space.
     const claimed = hdr.blockCount;
-    if (claimed <= full) {
+    // A finalised file's last block may be SHORT, so `claimed` legitimately exceeds `full` by one.
+    // Accept it only if that block's own header is actually present and valid.
+    let claimedOk = claimed <= full;
+    if (!claimedOk && claimed === full + 1) {
+      const lastBh = readBlockHeaderSync(fd, hdr, claimed - 1);
+      claimedOk =
+        !!lastBh &&
+        lastBh.magicOk &&
+        lastBh.headerCrcOk &&
+        blockOffset(hdr, claimed - 1) + hdr.blockHeaderBytes + lastBh.payloadBytes <= fileSize;
+    }
+    if (claimedOk) {
       return {
         blockCount: claimed,
         totalFrames: hdr.totalFrames,

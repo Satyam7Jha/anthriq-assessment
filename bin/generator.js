@@ -76,6 +76,22 @@ function main() {
   // per-tick view allocation. This is the reason the ring is non-pooled and alignment-checked.
   const ringF32 = new Float32Array(ring.buf.buffer, ring.buf.byteOffset, ring.buf.length / 4);
 
+  // SEND STAGING. net.Socket.write() does NOT copy the Buffer it is given — it retains the
+  // reference and writes the bytes later, when the kernel has room. Handing it a view straight into
+  // the generator ring is therefore a data-corruption bug: once the ring wraps, the socket sends
+  // whatever the slot holds AT FLUSH TIME, not what was queued. Verified empirically (see
+  // test/transport.zerocopy.test.mjs) — it silently corrupted a 10-second stall run before it was
+  // found.
+  //
+  // Each block is therefore copied into a staging ring before being handed to the socket. The bound
+  // is exact rather than hopeful: the drain loop refuses to write once writableLength >= SOCKET_HWM,
+  // so outstanding bytes never exceed SOCKET_HWM + one block. A staging ring larger than that can
+  // never recycle a slot the socket still references. Cost: one 2,592-byte memcpy per block =
+  // 518 KB/s, against the 512 KB/s we are already moving. Zero allocation.
+  const stageSlots = Math.ceil(D.SOCKET_HWM_BYTES / cfg.wireBlockBytes) + 4;
+  const sendStage = Buffer.allocUnsafeSlow(stageSlots * cfg.wireBlockBytes);
+  let stageIndex = 0;
+
   let socket = null;
   let connected = false;
   let blocksWritten = 0;
@@ -166,7 +182,10 @@ function main() {
         break;
       }
       const block = ring.peek();
-      socket.write(block.bytes);
+      const stageOff = stageIndex * cfg.wireBlockBytes;
+      block.bytes.copy(sendStage, stageOff);
+      socket.write(sendStage.subarray(stageOff, stageOff + block.bytes.length));
+      stageIndex = (stageIndex + 1) % stageSlots;
       bytesWritten += block.bytes.length;
       blocksWritten++;
       ring.pop();
@@ -280,6 +299,7 @@ function main() {
     wireBlockBytes: cfg.wireBlockBytes,
     valuesPerSecond: cfg.valuesPerSecond,
     ringBlocks: cfg.generatorRingBlocks,
+    sendStageSlots: stageSlots,
     ringSeconds: +cfg.generatorRingSeconds.toFixed(3),
     dither: cfg.dither,
   });

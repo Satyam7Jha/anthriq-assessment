@@ -118,6 +118,11 @@ async function main() {
   const writer = new BlockWriter({
     fd,
     cfg,
+    // When a write completes the writer can take another block. Pull from the ring here rather than
+    // queueing inside the writer: backlog must live in the ring, where it is bounded and measured.
+    onWritten: () => {
+      if (!stopping && !diskError) drainRingToWriter();
+    },
     onError: (err) => {
       log.error('write-failed', { code: err.code, message: err.message });
       diskError = err;
@@ -126,30 +131,60 @@ async function main() {
   });
 
   // ---- assembly state ------------------------------------------------------------------------
-  let pendingStartFrame = null; // frame index of the block currently accumulating in the ring
-  let pendingFrames = 0;
-  let pendingGapBefore = 0;
+  //
+  // The ring holds interleaved frame BYTES contiguously. What bytes alone cannot express is where one
+  // contiguous run of frame indices ends and the next begins — which is exactly what a gap creates.
+  // `segments` carries that, and only that: one descriptor per contiguous run currently resident.
+  //
+  // Why a descriptor list rather than "flush the partial block immediately on a gap": the writer may
+  // be busy, and a block boundary cannot wait for it. Recording the boundary as data keeps the FRAMES
+  // in the ring — the only queue — while still knowing exactly where the boundary falls.
+  //
+  // Bounded, like everything else here: a segment costs three numbers and can only be created by a
+  // gap. The cap exists so a pathologically flapping transport cannot turn this into
+  // time-proportional memory; reaching it is treated as overload and accounted like any other drop.
+  const MAX_SEGMENTS = 4096;
+  const segments = []; // [{ startFrameIndex, frames, gapBefore }]
   let diskError = null;
   let stopping = false;
   let connections = 0;
   let firstFrameIndex = null;
 
-  /** Move one file block (or a short final block) out of the ring and into the writer. */
-  function emitBlock(frameCount) {
+  /** Hand one block (or a short boundary block) from the head segment to the writer. */
+  function emitBlockFromHead(frameCount) {
+    const seg = segments[0];
     const bytesLen = frameCount * cfg.bytesPerFrame;
     ring.peekInto(stage, 0, bytesLen);
     writer.enqueue({
       interleaved: stage,
       srcOffset: 0,
-      startFrameIndex: pendingStartFrame,
+      startFrameIndex: seg.startFrameIndex,
       frameCount,
-      precedingGapFrames: pendingGapBefore,
+      precedingGapFrames: seg.gapBefore, // only the FIRST block of a segment follows that gap
       monotonicNanos: process.hrtime.bigint(),
     });
     ring.consume(bytesLen);
-    pendingStartFrame += frameCount;
-    pendingFrames -= frameCount;
-    pendingGapBefore = 0;
+    seg.startFrameIndex += frameCount;
+    seg.frames -= frameCount;
+    seg.gapBefore = 0;
+    if (seg.frames === 0) segments.shift();
+  }
+
+  /**
+   * Hand the writer as many blocks as it will currently accept. Frames that do not fit stay in the
+   * ring, which is what keeps the ring the only queue in the system (PLAN §7.3).
+   *
+   * A SHORT block is emitted only at a real boundary — when a later segment already exists, so the
+   * head segment is known to be complete — or at shutdown. Never speculatively: a short block spends
+   * a whole 64-byte header on a fraction of a block's payload.
+   */
+  function drainRingToWriter() {
+    while (writer.canAccept && segments.length > 0) {
+      const seg = segments[0];
+      if (seg.frames >= cfg.framesPerBlock) emitBlockFromHead(cfg.framesPerBlock);
+      else if (segments.length > 1) emitBlockFromHead(seg.frames); // a gap follows: seg is complete
+      else break; // still filling
+    }
   }
 
   const parser = new WireParser({
@@ -157,21 +192,22 @@ async function main() {
     onBlock: (hdr, buf, payloadOffset, precedingGapFrames) => {
       if (stopping || diskError) return;
       if (firstFrameIndex === null) firstFrameIndex = hdr.startFrameIndex;
-      if (pendingStartFrame === null) pendingStartFrame = hdr.startFrameIndex;
-      if (precedingGapFrames > 0) {
-        // A gap means the NEXT file block must start at a new absolute frame index. Flush whatever
-        // is accumulated as a SHORT block first — which is legal and self-describing because
-        // frameCount is a per-block field, not a global constant.
-        if (pendingFrames > 0) emitBlock(pendingFrames);
-        pendingStartFrame = hdr.startFrameIndex;
-        pendingGapBefore = precedingGapFrames;
+
+      const startsNewSegment = segments.length === 0 || precedingGapFrames > 0;
+      if (startsNewSegment && segments.length >= MAX_SEGMENTS) {
+        ledger.record(hdr.startFrameIndex, hdr.frameCount, CAUSE.RECORDER_RING_FULL);
+        log.throttled('warn', 'segment-cap-reached', {
+          segments: segments.length,
+          startFrameIndex: hdr.startFrameIndex,
+        });
+        return;
       }
 
       if (!ring.write(buf, payloadOffset, hdr.payloadBytes)) {
-        // FULL. Policy: DROP-NEWEST, accounted with position (PLAN §7.4). Not drop-oldest: that
-        // would require rewriting committed file blocks or emitting frames out of order, breaking
-        // the monotonic-frameIndex invariant the whole format rests on. Not block-the-producer:
-        // forbidden by R11, and there is no mechanism to do it anyway.
+        // FULL. Policy: DROP-NEWEST, accounted with position (PLAN §7.4). Not drop-oldest: that would
+        // require rewriting committed file blocks or emitting frames out of order, breaking the
+        // monotonic-frameIndex invariant the whole format rests on. Not block-the-producer: forbidden
+        // by R11, and there is no mechanism to do it anyway.
         ledger.record(hdr.startFrameIndex, hdr.frameCount, CAUSE.RECORDER_RING_FULL);
         log.throttled('warn', 'recorder-ring-full', {
           startFrameIndex: hdr.startFrameIndex,
@@ -181,7 +217,16 @@ async function main() {
         });
         return;
       }
-      pendingFrames += hdr.frameCount;
+
+      if (startsNewSegment) {
+        segments.push({
+          startFrameIndex: hdr.startFrameIndex,
+          frames: hdr.frameCount,
+          gapBefore: precedingGapFrames,
+        });
+      } else {
+        segments[segments.length - 1].frames += hdr.frameCount;
+      }
 
       const transition = ring.updateLevel();
       if (transition) {
@@ -192,7 +237,7 @@ async function main() {
         });
       }
 
-      while (pendingFrames >= cfg.framesPerBlock) emitBlock(cfg.framesPerBlock);
+      drainRingToWriter();
     },
     onGap: (startFrameIndex, frameCount) => {
       ledger.record(startFrameIndex, frameCount, CAUSE.TRANSPORT_GAP);
@@ -310,13 +355,15 @@ async function main() {
       step = 'drain-writes';
       await writer.drain();
 
-      step = 'flush-partial-block';
-      // The ring may hold fewer than framesPerBlock frames. Write a SHORT final block — legal and
-      // self-describing because frameCount is per-block. This is precisely why that field exists.
-      if (pendingFrames > 0 && !diskError) {
-        emitBlock(pendingFrames);
-        await writer.drain();
+      step = 'flush-remaining-segments';
+      // The ring may hold fewer than framesPerBlock frames, possibly spread over several segments.
+      // Write them all out, the last as a SHORT block — legal and self-describing because frameCount
+      // is a per-block field. This is precisely why it is per-block rather than a global constant.
+      while (segments.length > 0 && !diskError) {
+        if (writer.canAccept) emitBlockFromHead(Math.min(cfg.framesPerBlock, segments[0].frames));
+        else await writer.drain();
       }
+      await writer.drain();
 
       const totalFrames = writer.totalFrames;
       const totalValues = totalFrames * cfg.channelCount;

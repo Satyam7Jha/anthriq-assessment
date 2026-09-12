@@ -24,15 +24,27 @@ class BlockWriter {
     this.onWritten = onWritten;
     this.onError = onError;
 
-    // Double-buffered assembly: one buffer can be in flight on the threadpool while the next block
-    // is transposed into the other. Two buffers, allocated once — not one per block.
+    // Double-buffered assembly: one buffer can be in flight on the libuv threadpool while the next
+    // block is transposed into the other. Two buffers, allocated once — never one per block.
+    //
+    // The invariant that makes two buffers SUFFICIENT and SAFE: at most one write is in flight and
+    // at most one assembled block waits behind it. fs.write, like socket.write, does not copy the
+    // buffer it is given, so a third assembled block would recycle a buffer the kernel is still
+    // reading from — a silent corruption bug.
+    //
+    // It is also why `pending` holds at most one entry. An unbounded pending array would be a SECOND
+    // queue, and the whole point of one-write-in-flight (PLAN §7.3) is that the ring is the ONLY
+    // queue: if backlog could accumulate here as well, ring fill would stop being a true measure of
+    // it and the watermark logic would be blind. Backlog belongs in the ring, where it is bounded,
+    // measured, and visible.
     this.bufs = [
       Buffer.allocUnsafeSlow(cfg.blockStrideBytes),
       Buffer.allocUnsafeSlow(cfg.blockStrideBytes),
     ];
     this.next = 0;
     this.inFlight = false;
-    this.pending = []; // assembled blocks awaiting their turn; bounded by the ring's capacity
+    this.pending = []; // at most ONE entry, by the invariant above
+    this.maxPending = 1;
 
     this.blocksWritten = 0;
     this.bytesWritten = 0;
@@ -50,12 +62,23 @@ class BlockWriter {
     return this.pending.length + (this.inFlight ? 1 : 0);
   }
 
+  /** True when enqueue() is safe. The caller must check this and leave the frames in the ring
+   *  otherwise — that is what keeps the ring the only queue. */
+  get canAccept() {
+    return !this.errored && this.pending.length < this.maxPending;
+  }
+
   /**
    * Assemble one file block from interleaved frame bytes and queue it for writing.
    * @param {Buffer} interleaved source holding frameCount*channelCount float32s
    * @param {number} srcOffset byte offset into `interleaved`
    */
   enqueue({ interleaved, srcOffset, startFrameIndex, frameCount, precedingGapFrames, monotonicNanos }) {
+    if (!this.canAccept) {
+      // Programming error, not a runtime condition: callers gate on canAccept. Failing loudly beats
+      // recycling a buffer the kernel is still reading.
+      throw new Error(`BlockWriter.enqueue called while ${this.pending.length} block(s) already pending`);
+    }
     const { channelCount, framesPerBlock, bytesPerValue } = this.cfg;
     const buf = this.bufs[this.next];
     this.next = (this.next + 1) % this.bufs.length;
@@ -96,7 +119,15 @@ class BlockWriter {
     this.inFlight = true;
     const t0 = process.hrtime.bigint();
     const position = this.filePosition;
-    this.filePosition += job.bytes;
+    // EVERY block occupies exactly blockStrideBytes on disk, even a SHORT one. This is the invariant
+    // the whole format rests on: blockStrideBytes is "the single number an O(1) seek needs"
+    // (PLAN §8.2), and a mid-file block that occupied fewer bytes would silently invalidate every
+    // offset formula after it — seek, channel-subset reads, and the truncation-recovery block count.
+    // A short block therefore writes only its valid bytes and leaves the remainder of its stride as a
+    // sparse hole; the block header's own frameCount bounds the valid payload, so a reader never
+    // looks at the hole. Short blocks occur only at a gap boundary or at shutdown, so the wasted
+    // bytes are bounded by (number of gaps + 1) * blockStrideBytes.
+    this.filePosition += this.cfg.blockStrideBytes;
 
     fs.write(this.fd, job.buf, 0, job.bytes, position, (err, written) => {
       this.inFlight = false;
@@ -117,8 +148,10 @@ class BlockWriter {
       // so the header never claims data the kernel has not got.
       this.lastFrameEnd = job.startFrameIndex + job.frameCount;
       this.totalFrames += job.frameCount;
-      this.onWritten(job, ms);
       this.#kick();
+      // Notified AFTER #kick so the callback can assemble the next block into the buffer this write
+      // just released.
+      this.onWritten(job, ms);
     });
   }
 
