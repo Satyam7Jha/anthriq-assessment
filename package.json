@@ -1,0 +1,22 @@
+{
+  "name": "sigacq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Continuous multi-channel biosignal acquisition, recording, retrieval and playback",
+  "engines": { "node": ">=20" },
+  "type": "commonjs",
+  "bin": {
+    "sigctl": "bin/sigctl.js",
+    "sigval": "bin/sigval.js",
+    "sigplay": "bin/sigplay.js"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "record": "node bin/recorder.js",
+    "generate": "node bin/generator.js",
+    "validate": "node bin/sigval.js",
+    "ui": "node bin/uiserver.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
