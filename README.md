@@ -35,7 +35,38 @@ All measured on the target machine. Method and raw artifacts in [Measured perfor
 
 ## Quick start
 
-No install step is needed for the acquisition path.
+### Everything at once
+
+```bash
+npm install && npm run ui:build && npm run demo
+```
+
+Starts the recorder, the generator and the viewer as three separate processes, prints
+`http://localhost:8787`, and records until you press Ctrl-C (or for the duration you pass:
+`npm run demo -- 600`). On exit it shuts the recorder down through the clean-shutdown path — finalising
+the header, writing the trailer and sidecar — and then validates what was recorded:
+
+```
+  recorder — final report
+    frames               100,000  =  3,200,000 values
+    ring peak            0.76% of 64.0000 MiB (131.1 s capacity)
+    dropped              0 frames in 0 range(s)
+    finalised            yes
+
+  ── verification ─────────────────────────────────────────
+Expected: 3,200,000 samples
+Recorded: 3,200,000 samples
+Missing:   0
+Duplicated: 0
+Incorrect:  0
+Result: PASS
+  exit status: 0
+```
+
+`npm install` and `npm run ui:build` are only needed for the **viewer**. The acquisition, storage,
+retrieval and verification paths below run on a bare checkout with no install step.
+
+### Or run the processes yourself
 
 ```bash
 # 1. Recorder first — it owns the socket and the file.
@@ -657,6 +688,7 @@ src/viz/      min/max envelope decimation. Pure.
 ui/           React 19 + TypeScript + Tailwind 4; committed bundle in ui/dist
 test/         19 tests — signal determinism, scheduler algebra, transport invariants
 bench/        corrupt.mjs (validator proven failing) · stalled-consumer.mjs (R11)
+scripts/      demo.sh — starts all three processes, then verifies on clean shutdown
 tools/        independent_reader.py — the format spec, proven
 docs/         FORMAT.md — complete standalone specification
 PLAN.md       full architecture and rationale, including every rejected alternative

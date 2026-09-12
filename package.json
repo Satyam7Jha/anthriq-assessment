@@ -20,7 +20,8 @@
     "ui": "node bin/uiserver.js",
     "ui:build": "node ui/build.mjs",
     "ui:watch": "node ui/build.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo": "bash scripts/demo.sh"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
