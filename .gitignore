@@ -3,3 +3,4 @@ node_modules/
 artifacts/*.csv
 artifacts/*.ndjson
 .DS_Store
+*.stats.ndjson

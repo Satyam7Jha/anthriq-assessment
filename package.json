@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Continuous multi-channel biosignal acquisition, recording, retrieval and playback",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "commonjs",
   "bin": {
     "sigctl": "bin/sigctl.js",
@@ -15,8 +17,19 @@
     "record": "node bin/recorder.js",
     "generate": "node bin/generator.js",
     "validate": "node bin/sigval.js",
-    "ui": "node bin/uiserver.js"
+    "ui": "node bin/uiserver.js",
+    "ui:build": "node ui/build.mjs",
+    "ui:watch": "node ui/build.mjs --watch",
+    "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
 }

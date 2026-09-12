@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Instrument software is read in dim rooms and stared at for hours. The palette is deliberately
+   low-luminance with a single saturated accent, so a red gap band or an amber watermark warning is
+   the only thing on screen that draws the eye. */
+@theme {
+  --color-trace: oklch(0.78 0.13 195);
+  --color-gap: oklch(0.63 0.21 22);
+  --color-warn: oklch(0.77 0.16 75);
+  --color-ok: oklch(0.75 0.16 155);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Tabular figures everywhere a number changes in place: a counter whose digits shift width is
+   unreadable at 20 Hz. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.02 250);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
