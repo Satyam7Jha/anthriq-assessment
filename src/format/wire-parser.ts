@@ -1,4 +1,4 @@
-// Stream framing, CRC verification, and gap/duplicate detection (PLAN §4.4).
+// Stream framing, CRC verification, and gap/duplicate detection.
 //
 // One integer of state — expectedNext — and the same three-line rule the validator uses. That
 // symmetry is deliberate: if recorder and validator disagree, one of them has a bug; the design is

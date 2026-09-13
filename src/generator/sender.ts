@@ -1,4 +1,4 @@
-// The generator's socket side (PLAN §3.3): hand ring blocks to the recorder without ever waiting.
+// The generator's socket side: hand ring blocks to the recorder without ever waiting.
 //
 // Two rules make "a stalled consumer cannot slow the generator" true:
 //   - write() is never awaited and its boolean return is ignored; the loop stops at the socket's

@@ -1,4 +1,4 @@
-// 32-byte wire block header (PLAN §4.1). Little-endian unconditionally: the wire is host-local.
+// 32-byte wire block header. Little-endian unconditionally: the wire is host-local.
 //
 // The field that matters is startFrameIndex: absolute, monotonic, assigned by the scheduler before
 // the generator's ring, never renumbered. That is what lets the recorder report the POSITION of a loss

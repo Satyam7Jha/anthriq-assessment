@@ -1,4 +1,4 @@
-// `sigctl info` — metadata inspection (R30).
+// `sigctl info` — metadata inspection.
 
 import fs from 'node:fs';
 import type { Recording } from '../store/recover.ts';

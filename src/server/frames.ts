@@ -1,7 +1,7 @@
-// One decimated window, as the binary frame the browser draws (PLAN §11.2).
+// One decimated window, as the binary frame the browser draws.
 //
 // Decimation happens here, not in the browser: 2 floats per pixel column per channel instead of
-// 4,000 per channel-second. Buffers are reused across requests (F-06).
+// 4,000 per channel-second. Buffers are reused across requests.
 //
 // Frame layout:  [u32 jsonBytes][JSON, space-padded to a 4-byte boundary][float32 envelopes]
 // Envelopes are channels x columns x [min, max]; NaN marks a column with no data. The browser takes a

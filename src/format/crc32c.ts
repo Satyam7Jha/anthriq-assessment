@@ -1,4 +1,4 @@
-// CRC-32C (Castagnoli, reflected polynomial 0x82F63B78). PLAN §4.3.
+// CRC-32C (Castagnoli, reflected polynomial 0x82F63B78).
 //
 // Without a checksum a corrupted block is indistinguishable from a block of "incorrect values",
 // muddying the validator's classification. CRC-32C rather than SHA-256: we defend against bit-rot and

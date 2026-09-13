@@ -1,4 +1,4 @@
-// 4,096-byte self-describing file header (PLAN §8.2) — what makes a recording interpretable without
+// 4,096-byte self-describing file header — what makes a recording interpretable without
 // the source code. One page: room to grow without moving anything, and block 0 starts page-aligned.
 //
 //   endianness     the u32 0x01020304 written in file order. A little-endian read sees 0x01020304 for

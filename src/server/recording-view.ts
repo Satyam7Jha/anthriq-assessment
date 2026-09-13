@@ -1,4 +1,4 @@
-// The server's read-only window onto the current recording (PLAN §11.3).
+// The server's read-only window onto the current recording.
 //
 // This process never joins the acquisition socket and never writes the file: it opens it O_RDONLY
 // and reads with pread. It has no channel through which to slow the recorder down. The view is

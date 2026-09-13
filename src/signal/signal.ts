@@ -1,4 +1,4 @@
-// The deterministic signal (PLAN §5).
+// The deterministic signal.
 //
 // CONTRACT: value(c, n) is a pure, closed-form function of (channel, frameIndex) that is
 // BIT-IDENTICAL on every recomputation, in any process, on any conforming engine, at any later time.

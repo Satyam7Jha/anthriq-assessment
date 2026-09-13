@@ -1,7 +1,7 @@
-// PROCESS A — the generator (PLAN §3.3, §6): the deterministic signal at the configured real-world rate,
+// PROCESS A — the generator: the deterministic signal at the configured real-world rate,
 // paced on a monotonic clock, handed to the recorder over an AF_UNIX socket.
 //
-// Its rate must not depend on the recorder (R11). The tick awaits nothing; a bounded ring absorbs
+// Its rate must not depend on the recorder. The tick awaits nothing; a bounded ring absorbs
 // ~5 s of consumer stall; when it is full the oldest block is dropped and its position ledgered.
 
 import fs from 'node:fs';

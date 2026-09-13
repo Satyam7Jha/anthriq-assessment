@@ -1,4 +1,4 @@
-// Absolute-deadline monotonic scheduler (PLAN §6).
+// Absolute-deadline monotonic scheduler.
 //
 // THE INVARIANT:  emittedFrames(k) = k * framesPerTick   and   deadline(k) = t0 + k * tick.
 // Neither depends on how long any tick took. Deadlines come from t0 and k, never from "now", so drift
@@ -114,7 +114,7 @@ export function createScheduler(o: SchedulerOptions) {
       tick = 0n;
       frameIndex = anchorFrame = atFrame;
     },
-    /** Pacing accuracy (PLAN §6.5). */
+    /** Pacing accuracy. */
     report() {
       const elapsedNs = started ? now() - t0 : 0n;
       const emittedFrames = frameIndex - anchorFrame;

@@ -1,4 +1,4 @@
-// The validator's core (PLAN §10): do the bytes on disk equal value(c, n) for every (c, n) the file
+// The validator's core: do the bytes on disk equal value(c, n) for every (c, n) the file
 // claims, and is the set of n exactly [0, totalFrames)?
 //
 // Streaming, O(1) memory: one reused block buffer and a handful of counters. The expected signal is

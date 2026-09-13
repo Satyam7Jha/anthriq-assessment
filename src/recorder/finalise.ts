@@ -1,4 +1,4 @@
-// Clean shutdown (PLAN §7.7), metadata first.
+// Clean shutdown, metadata first.
 //
 // F-02: a fixed timeout on a variable-latency operation guarantees the failure it exists to prevent.
 // So: drain for a budget scaled to the write latency actually observed; if the disk has not caught

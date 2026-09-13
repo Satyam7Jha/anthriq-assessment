@@ -1,4 +1,4 @@
-// Playback state for the viewer: play, pause, seek, rate, live (PLAN §9.5).
+// Playback state for the viewer: play, pause, seek, rate, live.
 //
 // The cursor runs on the MONOTONIC clock (Date.now() steps under NTP). Pause, resume and seek
 // re-anchor it: during playback, elapsed paused time is not owed — the one deliberate difference from

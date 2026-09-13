@@ -1,4 +1,4 @@
-// Opening a recording, including truncated and still-being-written ones (PLAN §8.6).
+// Opening a recording, including truncated and still-being-written ones.
 //
 // Every tool uses this path unconditionally, so reading a live file and reading a SIGKILLed one are
 // the same code — the recovery path is exercised constantly, not only after a crash. It works because

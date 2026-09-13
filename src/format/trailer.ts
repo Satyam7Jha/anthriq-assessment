@@ -1,4 +1,4 @@
-// Drop-ledger trailer at EOF (PLAN §8.3).
+// Drop-ledger trailer at EOF.
 //
 //   "SIGTRLR1" | entryCount u32 | entryCount x 24-byte records | crc32c u32 | "SIGTRLR1"
 //

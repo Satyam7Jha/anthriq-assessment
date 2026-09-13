@@ -1,4 +1,4 @@
-// `sigctl seek` — measured seek cost (R36) — and `sigctl hexdump`, an annotated header for the README.
+// `sigctl seek` — measured seek cost — and `sigctl hexdump`, an annotated header for the README.
 
 import fs from 'node:fs';
 import type { Recording } from '../store/recover.ts';

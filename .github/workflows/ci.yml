@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: End-to-end — record 20 s, validate, play back
+        run: |
+          node bin/recorder.ts --out run.sigb --socket /tmp/ci.sock --quiet &
+          recorder=$!
+          sleep 1
+          node bin/generator.ts --socket /tmp/ci.sock --duration 20 --stats-interval 0
+          kill -INT "$recorder" && wait "$recorder"
+          node bin/sigval.ts run.sigb
+          node bin/sigctl.ts info run.sigb
+          node bin/sigctl.ts play run.sigb --to 2s --speed 4 --out none --stats-interval 0 < /dev/null

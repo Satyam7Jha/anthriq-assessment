@@ -1,4 +1,4 @@
-// Streaming reader: O(1) seek, channel-subset reads, bounded memory (PLAN §9.1–9.3).
+// Streaming reader: O(1) seek, channel-subset reads, bounded memory.
 //
 // Resident memory is blockHeaderBytes + k * framesPerBlock * bytesPerValue — 32 KB for two channels,
 // 512 KB for 32 — independent of file size. Every read is counted, so "reads only what it needs" is
@@ -97,7 +97,7 @@ export function makeReader({ fd, hdr, extent }: Pick<Recording, 'fd' | 'hdr' | '
     }
   }
 
-  /** The closed-form cost of a read (PLAN §9.2): blocks * headerBytes + k * frames * bytesPerValue. */
+  /** The closed-form cost of a read: blocks * headerBytes + k * frames * bytesPerValue. */
   function predictBytes({ fromFrame, toFrame, channelCount: k }: { fromFrame: number; toFrame: number; channelCount: number }): number {
     const blocks = Math.floor((toFrame - 1) / hdr.framesPerBlock) - Math.floor(fromFrame / hdr.framesPerBlock) + 1;
     return blocks * hdr.blockHeaderBytes + k * (toFrame - fromFrame) * hdr.bytesPerValue;

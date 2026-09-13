@@ -1,4 +1,4 @@
-// Block assembly, transpose, and the one-write-in-flight disk path (PLAN §7.3).
+// Block assembly, transpose, and the one-write-in-flight disk path.
 //
 // AT MOST ONE fs.write IN FLIGHT, so the ring is the only queue. Free-running writes would turn
 // libuv's threadpool into a second, unbounded, invisible buffer the watermarks cannot see.
@@ -29,7 +29,7 @@ export interface WriterOptions {
   geometry: WriterGeometry;
   onWritten?: () => void;
   onError?: (err: NodeJS.ErrnoException) => void;
-  /** Fault injection (F7): hold each write back by this many ms — indistinguishable from a slow disk. */
+  /** Fault injection: hold each write back by this many ms — indistinguishable from a slow disk. */
   injectStallMs?: number;
 }
 

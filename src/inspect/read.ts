@@ -1,4 +1,4 @@
-// `sigctl read` — time-range and channel-subset retrieval (R31, R32), streamed to stdout.
+// `sigctl read` — time-range and channel-subset retrieval, streamed to stdout.
 
 import type { Recording } from '../store/recover.ts';
 import { makeReader } from '../store/reader.ts';

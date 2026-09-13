@@ -1,4 +1,4 @@
-// Bounded, coalescing drop ledger (PLAN §7.6).
+// Bounded, coalescing drop ledger.
 //
 // The brief wants the POSITION of loss, not a flag. The bound is not incidental: an unbounded ledger
 // is itself memory proportional to elapsed time. Adjacent same-cause ranges coalesce, so a sustained

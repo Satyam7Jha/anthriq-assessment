@@ -1,4 +1,4 @@
-// PROCESS B — the recorder (PLAN §7).
+// PROCESS B — the recorder.
 //
 // It owns the file, so it owns the socket: it is the server and the generator connects. Every buffer
 // is allocated before the first byte is accepted, so RSS has no term that grows with run duration.

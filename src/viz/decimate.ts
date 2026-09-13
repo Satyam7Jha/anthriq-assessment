@@ -1,4 +1,4 @@
-// Min/max envelope decimation (PLAN §11.2). Pure.
+// Min/max envelope decimation. Pure.
 //
 // At 4 kHz on a 1,000 px trace showing 10 s, each pixel column covers 40 samples. Subsampling shows a
 // transient only if it lands on a sample point; averaging erases it; a min/max envelope means a

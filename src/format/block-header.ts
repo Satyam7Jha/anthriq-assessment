@@ -1,4 +1,4 @@
-// 64-byte file block header (PLAN §8.3).
+// 64-byte file block header.
 //
 // Each block is independently valid: its own absolute startFrameIndex (not blockIndex *
 // framesPerBlock, which is false after a drop), its own frameCount (which makes a short block legal)

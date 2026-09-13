@@ -1,4 +1,4 @@
-// The generator's fixed-slot block ring (PLAN §3.3).
+// The generator's fixed-slot block ring.
 //
 // Absorbs consumer stalls so the generator's pacing never depends on the recorder: 1,024 slots x
 // 2,592 B = 2.53 MiB = 5.12 s at defaults. Allocated once; blocks are written in place, so the
@@ -6,7 +6,7 @@
 //
 // Full ring: DROP-OLDEST, returning the victim's exact position for the ledger. Oldest, because the
 // newest block is what the recorder resynchronises on, and dropping the oldest leaves one clean
-// monotonic gap. (The recorder makes the opposite choice for its own reasons — PLAN §7.4.)
+// monotonic gap. (The recorder makes the opposite choice for its own reasons.)
 
 export interface Victim {
   startFrameIndex: number;

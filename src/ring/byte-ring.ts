@@ -1,4 +1,4 @@
-// The recorder's bounded byte ring (PLAN §7.1–7.2).
+// The recorder's bounded byte ring.
 //
 // One preallocated Buffer with head/tail offsets; wrap-around costs at most two copies. Allocated
 // before the socket is accepted, so recorder RSS has no term that depends on run duration. At
