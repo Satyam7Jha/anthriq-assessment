@@ -42,7 +42,7 @@ export function startServer(o: ServerOptions): void {
   server.on('listening', () => {
     const { port } = server.address() as AddressInfo;
     if (port !== o.port) process.stderr.write(`\n  port ${o.port} was busy, using ${port}`);
-    process.stderr.write(`\n  sigacq:  http://localhost:${port}\n\n`);
+    process.stderr.write(`\n  The Odyssey:  http://localhost:${port}\n\n`);
     log.info('listening', { port, file: view.path, recordingsDir: o.recordingsDir });
   });
   server.listen(o.port);

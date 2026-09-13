@@ -37,7 +37,7 @@ export function Toolbar({ recording, state, seconds, inspectorOpen, onToggleInsp
             <path d="M1.5 9h2.5l2-5 3 10 2.5-7 1.5 2h3.5" />
           </svg>
         </span>
-        <span className="text-[17px] font-semibold tracking-tight">sigacq</span>
+        <span className="text-[17px] font-semibold tracking-tight">The Odyssey</span>
       </div>
       <span aria-hidden className="h-6 w-px bg-line" />
       <div className="flex min-w-0 flex-1 items-center gap-3">

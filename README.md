@@ -1,4 +1,4 @@
-# sigacq — continuous multi-channel biosignal acquisition, recording, retrieval and playback
+# The Odyssey — continuous multi-channel biosignal acquisition, recording, retrieval and playback
 
 A 32-channel, 4,000 Hz acquisition pipeline in Node.js and React: a deterministic signal generated in
 one process, streamed to a separate recorder process over a Unix domain socket, persisted to a
