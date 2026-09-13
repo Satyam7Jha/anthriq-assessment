@@ -21,9 +21,32 @@ export interface SessionState {
   error: string | null;
 }
 
-export function createSession(o: { view: RecordingView; transport: Transport; recordingsDir: string; channelCount: number; sampleRateHz: number; log: Logger }) {
+interface SessionOptions {
+  view: RecordingView;
+  transport: Transport;
+  recordingsDir: string;
+  maxRecordingSeconds: number;
+  keepRecordings: number;
+  channelCount: number;
+  sampleRateHz: number;
+  log: Logger;
+}
+
+export function createSession(o: SessionOptions) {
   const state: SessionState = { state: o.view.path ? 'done' : 'idle', file: o.view.path ? path.basename(o.view.path) : null, validation: null, error: null };
   let children: { recorder: ChildProcess; generator: ChildProcess } | null = null;
+  let limitTimer: NodeJS.Timeout | null = null;
+
+  /** Delete all but the newest `keepRecordings` recordings (and their sidecars), never the open one. */
+  function prune(): void {
+    if (o.keepRecordings <= 0 || !fs.existsSync(o.recordingsDir)) return;
+    const recordings = fs.readdirSync(o.recordingsDir).filter((f) => f.endsWith('.sigb')).sort().reverse();
+    for (const old of recordings.slice(o.keepRecordings)) {
+      const base = path.join(o.recordingsDir, old);
+      if (base === o.view.path) continue;
+      for (const f of fs.readdirSync(o.recordingsDir).filter((f) => f.startsWith(old.replace(/\.sigb$/, '')))) fs.rmSync(path.join(o.recordingsDir, f), { force: true });
+    }
+  }
   const busy = () => state.state === 'recording' || state.state === 'stopping' || state.state === 'verifying';
 
   async function start(): Promise<void> {
@@ -52,6 +75,7 @@ export function createSession(o: { view: RecordingView; transport: Transport; re
     o.transport.reset();
     Object.assign(state, { state: 'recording', file: path.basename(out), validation: null, error: null });
     o.log.info('session-start', { file: out, recorderPid: recorder.pid, generatorPid: generator.pid });
+    if (o.maxRecordingSeconds > 0) limitTimer = setTimeout(() => void stop(), o.maxRecordingSeconds * 1000);
 
     recorder.once('exit', (code) => {
       if (state.state !== 'recording') return;
@@ -64,6 +88,8 @@ export function createSession(o: { view: RecordingView; transport: Transport; re
     if (state.state !== 'recording' || !children) return;
     const { recorder, generator } = children;
     state.state = 'stopping';
+    if (limitTimer) clearTimeout(limitTimer);
+    limitTimer = null;
     // Producer first, then the recorder through its clean shutdown, which finalises the file.
     generator.kill('SIGTERM');
     await exited(generator, 3000);
@@ -75,6 +101,7 @@ export function createSession(o: { view: RecordingView; transport: Transport; re
     state.validation = await runValidator(o.view.path!);
     state.state = 'done';
     o.log.info('session-done', { file: o.view.path, exitCode: state.validation.exitCode });
+    prune();
   }
 
   /** On server exit: stop a running recording cleanly rather than orphan it. */

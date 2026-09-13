@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: sigacq
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/meta

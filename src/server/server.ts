@@ -15,6 +15,10 @@ export interface ServerOptions {
   /** An explicit --port is used exactly; the default falls back to the next free port. */
   explicitPort: boolean;
   recordingsDir: string;
+  /** Stop a browser-started recording after this long; 0 means never. Bounds a public demo's disk. */
+  maxRecordingSeconds: number;
+  /** Keep only the newest N recordings; 0 keeps all. */
+  keepRecordings: number;
   channelCount: number;
   sampleRateHz: number;
 }
@@ -24,7 +28,7 @@ export function startServer(o: ServerOptions): void {
   const view = createRecordingView(o.file);
   const transport = createTransport();
   const defaults = { channelCount: o.channelCount, sampleRateHz: o.sampleRateHz };
-  const session = createSession({ view, transport, recordingsDir: o.recordingsDir, ...defaults, log });
+  const session = createSession({ view, transport, recordingsDir: o.recordingsDir, maxRecordingSeconds: o.maxRecordingSeconds, keepRecordings: o.keepRecordings, ...defaults, log });
   const handle = createRouter({ view, transport, session, defaults, log });
   const server = http.createServer((req, res) => void handle(req, res));
 
