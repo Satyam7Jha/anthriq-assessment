@@ -21,7 +21,8 @@
     "ui:watch": "node ui/build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "demo": "bash scripts/demo.sh",
-    "test:faults": "node bench/write-stall.mjs && node bench/stalled-consumer.mjs --stall 8 --duration 24"
+    "test:faults": "node bench/write-stall.mjs && node bench/stalled-consumer.mjs --stall 8 --duration 24",
+    "start": "node bin/uiserver.js"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",

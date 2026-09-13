@@ -9,7 +9,15 @@ export interface Marker {
   label: string;
 }
 
+/** What GET /api/meta returns before anything has been recorded. */
+export interface EmptyMeta {
+  empty: true;
+  channelCount: number;
+  sampleRateHz: number;
+}
+
 export interface Meta {
+  empty?: false;
   file: string;
   fileSizeBytes: number;
   channelCount: number;
@@ -101,4 +109,11 @@ export interface Validation {
     elapsedSeconds: number;
   } | null;
   stderr: string;
+}
+
+export interface Session {
+  state: 'idle' | 'recording' | 'stopping' | 'verifying' | 'done';
+  file: string | null;
+  validation: Validation | null;
+  error: string | null;
 }

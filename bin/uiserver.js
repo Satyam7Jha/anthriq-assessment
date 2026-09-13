@@ -17,11 +17,20 @@
 //
 // Decimation happens HERE, not in the browser: 2*width floats per channel instead of 4,000 per
 // channel-second, a ~200x reduction in bytes crossing the boundary.
+//
+// SESSION CONTROL. So a reviewer never needs a terminal, this process can also START and STOP a
+// recording. It does that the only way that keeps the guarantee above intact: it launches the
+// generator and the recorder as two separate child processes and sends them signals. It never joins
+// their socket and never writes the file. Control plane only; the data path is untouched, and a
+// recording made from the browser is produced by exactly the same two processes as one made from
+// the command line. When a recording stops, the validator runs automatically — also as its own
+// process — so a finished recording arrives already verified.
 
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { resolveConfig } = require('../src/config/config');
 const { parseArgv } = require('../src/util/cli');
 const { openRecording, readLedger } = require('../src/store/recover');
 const { makeReader } = require('../src/store/reader');
@@ -30,12 +39,16 @@ const { createLogger } = require('../src/util/logger');
 const D = require('../src/config/defaults');
 
 const USAGE = `
-sigacq uiserver — PROCESS E (read-only)
+sigacq uiserver — PROCESS E (reads recordings; starts and stops them as separate processes)
 
-  node bin/uiserver.js --follow FILE.sigb [--port ${D.UI_PORT}]
+  node bin/uiserver.js                          start empty; record from the browser
+  node bin/uiserver.js --follow FILE.sigb       open an existing (or live) recording
 
-  --follow PATH    recording to view. Works on a LIVE file being written.
-  --port N         HTTP port (default ${D.UI_PORT})
+  --follow PATH       recording to view. Works on a LIVE file being written.
+  --recordings DIR    where browser-started recordings go (default ./recordings)
+  --channels N        channel count for new recordings (default ${D.CHANNEL_COUNT})
+  --rate HZ           sample rate for new recordings   (default ${D.SAMPLE_RATE_HZ})
+  --port N            HTTP port (default ${D.UI_PORT})
   --stats PATH     recorder stats NDJSON to tail for the health panel
                    (defaults to <file>.stats.ndjson if present)
   --help
@@ -47,14 +60,12 @@ function main() {
   const { opts, positional } = parseArgv(process.argv.slice(2), { booleans: ['help'] });
   if (opts.help) return void process.stdout.write(USAGE);
   const file = opts.follow ?? positional[0];
-  if (!file) {
-    process.stderr.write(USAGE);
-    process.exit(64);
-  }
-  const filePath = path.resolve(String(file));
+  let filePath = file ? path.resolve(String(file)) : null; // changes when a new recording starts
   const port = Number(opts.port ?? D.UI_PORT);
   const log = createLogger({ component: 'uiserver' });
-  const statsPath = opts.stats ? String(opts.stats) : filePath.replace(/\.sigb$/, '') + '.stats.ndjson';
+  const recordingsDir = path.resolve(String(opts.recordings ?? 'recordings'));
+  const cfg = resolveConfig({ channelCount: opts.channels, sampleRateHz: opts.rate });
+  const statsPathFor = (f) => (opts.stats && f === (file && path.resolve(String(file))) ? String(opts.stats) : f.replace(/\.sigb$/, '') + '.stats.ndjson');
 
   // ---- a fresh read-only view of the file, re-resolved as it grows -----------------------------
   // Reopening per request is deliberate: a LIVE file's extent changes, and the recovery path
@@ -63,8 +74,9 @@ function main() {
   let cached = null;
   let cachedAt = 0;
   function view(maxAgeMs = 200) {
+    if (!filePath) throw Object.assign(new Error('no recording'), { noRecording: true });
     const now = Date.now();
-    if (cached && now - cachedAt < maxAgeMs) return cached;
+    if (cached && cached.filePath === filePath && now - cachedAt < maxAgeMs) return cached;
     cached?.close();
     cached = openRecording(filePath);
     cached.reader = makeReader(cached.fd, cached.hdr, cached.extent);
@@ -149,6 +161,8 @@ function main() {
   }
 
   function meta() {
+    // Nothing recorded yet: say what a recording WOULD be, so the empty state can describe it.
+    if (!filePath || !fs.existsSync(filePath)) return { empty: true, channelCount: cfg.channelCount, sampleRateHz: cfg.sampleRateHz };
     const v = view(0);
     const ledger = readLedger(v.fd, v.hdr, v.fileSize);
     return {
@@ -191,6 +205,8 @@ function main() {
 
   /** Tail the recorder's stats NDJSON — read-only, like everything else here. */
   function health() {
+    if (!filePath) return null;
+    const statsPath = statsPathFor(filePath);
     if (!fs.existsSync(statsPath)) return null;
     const size = fs.statSync(statsPath).size;
     const want = Math.min(size, 8192);
@@ -282,6 +298,106 @@ function main() {
     return { ...rest, position: transportPosition() };
   }
 
+  // ---- validation, as its own process -----------------------------------------------------------
+  function runValidator(target) {
+    return new Promise((resolve) => {
+      const child = spawn(process.execPath, [path.join(__dirname, 'sigval.js'), target, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.stderr.on('data', (d) => (err += d));
+      child.on('close', (code) => {
+        let report = null;
+        try {
+          report = JSON.parse(out);
+        } catch {
+          /* the validator refused before producing JSON; exitCode and stderr say why */
+        }
+        resolve({ exitCode: code, report, stderr: err.slice(-2000) });
+      });
+    });
+  }
+
+  // ---- session: start and stop recordings from the browser ---------------------------------------
+  // States: idle -> recording -> stopping -> verifying -> done (-> recording again).
+  const session = { state: filePath ? 'done' : 'idle', file: filePath ? path.basename(filePath) : null, validation: null, error: null };
+  let children = null; // { recorder, generator, socket }
+
+  const exited = (child, ms) =>
+    new Promise((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) return resolve(true);
+      const t = setTimeout(() => resolve(false), ms);
+      child.once('exit', () => {
+        clearTimeout(t);
+        resolve(true);
+      });
+    });
+
+  async function startSession() {
+    if (session.state === 'recording' || session.state === 'stopping' || session.state === 'verifying') return;
+    fs.mkdirSync(recordingsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    const out = path.join(recordingsDir, `recording-${stamp}.sigb`);
+    const socket = `/tmp/sigacq-ui-${process.pid}.sock`;
+    const shared = ['--channels', String(cfg.channelCount), '--rate', String(cfg.sampleRateHz), '--quiet'];
+
+    // Recorder first: it owns the socket and the file.
+    const recorder = spawn(
+      process.execPath,
+      [path.join(__dirname, 'recorder.js'), '--out', out, '--socket', socket, '--stats-interval', '1', '--stats-out', statsPathFor(out), ...shared],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
+    );
+    let recErr = '';
+    recorder.stderr.on('data', (d) => (recErr = (recErr + d).slice(-4000)));
+    for (let i = 0; i < 60 && !fs.existsSync(socket); i++) await new Promise((r) => setTimeout(r, 50));
+    if (!fs.existsSync(socket)) {
+      recorder.kill('SIGKILL');
+      session.error = 'The recorder did not start.';
+      return;
+    }
+    const generator = spawn(process.execPath, [path.join(__dirname, 'generator.js'), '--socket', socket, '--stats-interval', '0', ...shared], {
+      stdio: 'ignore',
+    });
+
+    children = { recorder, generator, socket };
+    filePath = out;
+    cached?.close();
+    cached = null;
+    transport.mode = 'live';
+    transport.state = 'PAUSED';
+    Object.assign(session, { state: 'recording', file: path.basename(out), validation: null, error: null });
+    log.info('session-start', { file: out, recorderPid: recorder.pid, generatorPid: generator.pid });
+
+    recorder.once('exit', (code) => {
+      if (session.state === 'recording') {
+        // The recorder ended on its own (disk full, crash). Stop the generator and verify what exists.
+        session.error = `The recorder stopped unexpectedly (exit ${code}).`;
+        log.warn('recorder-exited', { code, stderr: recErr.slice(-400) });
+        void stopSession();
+      }
+    });
+  }
+
+  async function stopSession() {
+    if (session.state !== 'recording' || !children) return;
+    const { recorder, generator } = children;
+    session.state = 'stopping';
+    // Producer first, then the recorder through its clean-shutdown path, which finalises the header
+    // and writes the ledger. The recorder bounds its own shutdown, so this wait is generous.
+    generator.kill('SIGTERM');
+    await exited(generator, 3000);
+    if (recorder.exitCode === null) recorder.kill('SIGINT');
+    if (!(await exited(recorder, 25_000))) recorder.kill('SIGKILL');
+    children = null;
+    cached?.close();
+    cached = null;
+
+    session.state = 'verifying';
+    session.validation = await runValidator(filePath);
+    session.state = 'done';
+    log.info('session-done', { file: filePath, exitCode: session.validation.exitCode });
+  }
+
   // ---- HTTP ------------------------------------------------------------------------------------
   const DIST = path.join(__dirname, '..', 'ui', 'dist');
 
@@ -294,8 +410,20 @@ function main() {
 
     try {
       if (url.pathname === '/api/meta') return send(200, meta());
-      if (url.pathname === '/api/health') return send(200, { recorder: health(), statsPath, present: fs.existsSync(statsPath) });
+      if (url.pathname === '/api/session' && req.method === 'GET') return send(200, session);
+      if (url.pathname === '/api/session/start' && req.method === 'POST') {
+        startSession().then(() => send(200, session), (e) => send(500, { error: e.message }));
+        return undefined;
+      }
+      if (url.pathname === '/api/session/stop' && req.method === 'POST') {
+        void stopSession();
+        return send(200, session); // returns while stopping; the client polls /api/session
+      }
 
+      if (url.pathname === '/api/frame' && (!filePath || !fs.existsSync(filePath))) {
+        res.writeHead(204);
+        return void res.end();
+      }
       if (url.pathname === '/api/frame') {
         // The browser PULLS frames: it asks for the next one when it has drawn the last. A slow
         // client therefore asks less often instead of accumulating a server-side backlog, which is
@@ -341,23 +469,9 @@ function main() {
       }
 
       if (url.pathname === '/api/validate' && req.method === 'POST') {
-        // Spawned as a SEPARATE PROCESS, for the same reason everything else here is: the
-        // validator's independence is the property that makes its verdict worth anything, and the
-        // UI must not be able to influence it.
-        const child = spawn('node', [path.join(__dirname, 'sigval.js'), filePath, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let out = '';
-        let err = '';
-        child.stdout.on('data', (d) => (out += d));
-        child.stderr.on('data', (d) => (err += d));
-        child.on('close', (code) => {
-          let parsed = null;
-          try {
-            parsed = JSON.parse(out);
-          } catch {
-            /* validator refused before producing JSON; exitCode + stderr tell the story */
-          }
-          send(200, { exitCode: code, report: parsed, stderr: err.slice(-2000) });
-        });
+        // A separate process: the validator's independence is what makes its verdict worth anything.
+        if (!filePath) return send(409, { error: 'no recording' });
+        runValidator(filePath).then((r) => send(200, r));
         return undefined;
       }
 
@@ -372,30 +486,38 @@ function main() {
       fs.createReadStream(filePathOnDisk).pipe(res);
       return undefined;
     } catch (e) {
+      if (e.noRecording) return send(409, { error: 'no recording' });
       log.error('request-failed', { path: url.pathname, message: e.message });
       return send(500, { error: e.message });
     }
   });
 
   server.listen(port, () => {
-    const v = view(0);
     log.info('listening', {
       url: `http://localhost:${port}`,
       file: filePath,
-      channelCount: v.hdr.channelCount,
-      sampleRateHz: v.hdr.sampleRateExactHz,
-      totalFrames: v.extent.totalFrames,
-      finalised: v.hdr.finalised,
-      mode: 'READ-ONLY — this process cannot affect the recorder',
+      recordingsDir,
+      mode: 'reads recordings O_RDONLY; starts and stops recordings as separate processes',
     });
-    process.stderr.write(`\n  biosignal viewer:  http://localhost:${port}\n\n`);
+    process.stderr.write(`\n  sigacq:  http://localhost:${port}\n\n`);
   });
 
-  process.on('SIGINT', () => {
+  // Never leave orphaned acquisition processes behind: stop a running recording cleanly on exit.
+  let quitting = false;
+  const quit = async () => {
+    if (quitting) process.exit(130);
+    quitting = true;
+    if (children) {
+      children.generator.kill('SIGTERM');
+      children.recorder.kill('SIGINT');
+      await exited(children.recorder, 20_000);
+    }
     server.close();
     cached?.close();
     process.exit(0);
-  });
+  };
+  process.on('SIGINT', () => void quit());
+  process.on('SIGTERM', () => void quit());
 }
 
 main();

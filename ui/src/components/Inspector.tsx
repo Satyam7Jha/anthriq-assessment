@@ -19,6 +19,8 @@ export interface InspectorProps {
   validation: Validation | null;
   validating: boolean;
   onValidate: () => void;
+  /** True while a recording is open or being saved: verification runs automatically when it stops. */
+  verifyDisabled?: boolean;
   frameMs: number;
   seekCost: SeekCost | null;
 }
@@ -35,16 +37,20 @@ export function Inspector(p: InspectorProps) {
     <div className="flex flex-col gap-6 px-5 py-6">
       <Group title="Verify">
         <div className="px-4 py-3.5">
-          {p.validation ? (
+          {p.validating ? (
+            <p className="text-[13px] text-label-2">Checking every sample on disk…</p>
+          ) : p.validation ? (
             <Verdict v={p.validation} />
           ) : (
             <p className="text-[13px] leading-relaxed text-label-2">
-              Recompute the expected signal and compare every sample on disk.
+              {p.verifyDisabled
+                ? 'Runs automatically when you stop recording.'
+                : 'Recompute the expected signal and compare every sample on disk.'}
             </p>
           )}
           <button
             onClick={p.onValidate}
-            disabled={p.validating}
+            disabled={p.validating || p.verifyDisabled}
             className={`mt-3 w-full rounded-lg py-2 text-[13px] font-medium transition active:scale-[0.99] disabled:opacity-50 ${
               p.validation ? 'bg-fill text-accent' : 'bg-accent text-white'
             }`}

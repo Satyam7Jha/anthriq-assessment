@@ -4,3 +4,4 @@ artifacts/*.csv
 artifacts/*.ndjson
 .DS_Store
 *.stats.ndjson
+recordings/
