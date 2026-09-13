@@ -28,6 +28,10 @@ export interface BlockHit {
 export function makeReader({ fd, hdr, extent }: Pick<Recording, 'fd' | 'hdr' | 'extent'>) {
   const stats = { bytesRead: 0, readCalls: 0 };
   const hdrBuf = Buffer.allocUnsafe(hdr.blockHeaderBytes);
+  // One block-sized run buffer per channel slot, kept across calls: playback reads 200 small ranges a
+  // second, and allocating per call would turn the memory bound into garbage-collector pressure.
+  const runBufs: Buffer[] = [];
+  const runBytes = hdr.framesPerBlock * hdr.bytesPerValue;
 
   function headerAt(b: number): BlockHeader | null {
     if (b < 0 || b >= extent.blockCount) return null;
@@ -65,7 +69,7 @@ export function makeReader({ fd, hdr, extent }: Pick<Recording, 'fd' | 'hdr' | '
     for (const c of channels) {
       if (!Number.isInteger(c) || c < 0 || c >= hdr.channelCount) throw new RangeError(`channel ${c} out of range 0..${hdr.channelCount - 1}`);
     }
-    const runBufs = channels.map(() => Buffer.allocUnsafeSlow(hdr.framesPerBlock * hdr.bytesPerValue)); // the memory bound
+    while (runBufs.length < channels.length) runBufs.push(Buffer.allocUnsafeSlow(runBytes)); // the memory bound
     const start = findBlock(fromFrame);
     if (!start) return;
     // Reuse the header findBlock read, and stop before reading past the range: that is what makes the
