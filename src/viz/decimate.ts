@@ -16,11 +16,17 @@ export interface EnvelopeStats {
 /**
  * Decimate `samples` into `columns` [min, max] pairs written to `out`. NaN marks lost data: NaN
  * samples are skipped, and a column with no real samples is emitted as NaN so a gap stays a gap.
+ *
+ * With `samplesPerColumn`, every column covers exactly that many samples from the start of `samples`
+ * (the last may hold fewer). A caller that also starts `samples` on a multiple of it gets columns on
+ * an absolute grid: a moving window then shifts whole columns instead of re-binning them, so the trace
+ * slides rather than shimmering.
  */
-export function envelope(samples: Float32Array, columns: number, out: Float32Array): EnvelopeStats {
+export function envelope(samples: Float32Array, columns: number, out: Float32Array, samplesPerColumn?: number): EnvelopeStats {
   const n = samples.length;
   if (n === 0 || columns <= 0) return { columns: 0, samplesPerColumn: 0, min: 0, max: 0, rms: 0, flatColumns: 0 };
-  const cols = Math.min(columns, n); // never invent columns there are no samples for
+  const spc = samplesPerColumn && samplesPerColumn >= 1 ? Math.floor(samplesPerColumn) : 0;
+  const cols = spc ? Math.min(columns, Math.ceil(n / spc)) : Math.min(columns, n); // never invent columns there are no samples for
   let gMin = Infinity;
   let gMax = -Infinity;
   let sumSq = 0;
@@ -29,8 +35,8 @@ export function envelope(samples: Float32Array, columns: number, out: Float32Arr
 
   for (let c = 0; c < cols; c++) {
     // Bounds from the column index, not an accumulated step, so rounding cannot overrun the array.
-    const lo = Math.floor((c * n) / cols);
-    const hi = Math.max(lo + 1, Math.floor(((c + 1) * n) / cols));
+    const lo = spc ? c * spc : Math.floor((c * n) / cols);
+    const hi = spc ? Math.min(n, lo + spc) : Math.max(lo + 1, Math.floor(((c + 1) * n) / cols));
     let mn = Infinity;
     let mx = -Infinity;
     for (let i = lo; i < hi; i++) {
@@ -52,5 +58,5 @@ export function envelope(samples: Float32Array, columns: number, out: Float32Arr
     gMax = Math.max(gMax, mx);
     if (mx - mn < 1e-7) flatColumns++;
   }
-  return { columns: cols, samplesPerColumn: n / cols, min: gMin, max: gMax, rms: counted ? Math.sqrt(sumSq / counted) : 0, flatColumns };
+  return { columns: cols, samplesPerColumn: spc || n / cols, min: gMin, max: gMax, rms: counted ? Math.sqrt(sumSq / counted) : 0, flatColumns };
 }

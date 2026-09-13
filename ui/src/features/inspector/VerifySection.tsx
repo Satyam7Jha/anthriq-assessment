@@ -5,7 +5,8 @@ import type { Discrepancy, Validation, ValidationReport } from '../../types';
 /**
  * The verdict, and the evidence it rests on. Verification is a separate validator process; this panel
  * restates its report as the five checks it performs. The checks sit in a collapsed disclosure whose
- * summary still shows every check's status, so the panel stays short without hiding a failure.
+ * summary still shows every check's status, so the panel stays short without hiding a failure. While a
+ * recording runs, the action here is Stop: nothing can be verified until the file is saved.
  */
 
 interface Check {
@@ -114,64 +115,68 @@ function CheckRow({ check }: { check: Check }) {
 export interface VerifySectionProps {
   validation: Validation | null;
   validating: boolean;
-  /** A recording is in progress: it is verified when it stops, not on demand. */
-  automatic: boolean;
+  /** A recording is running: it can only be verified once Stop has saved it. */
+  recordingInProgress: boolean;
   onVerify: () => void;
 }
 
-export function VerifySection({ validation, validating, automatic, onVerify }: VerifySectionProps) {
+export function VerifySection({ validation, validating, recordingInProgress, onVerify }: VerifySectionProps) {
   const report = validation?.report ?? null;
-  const shown = !validating && validation;
+  const shown = !validating && !recordingInProgress && validation;
   const checks = shown && report ? checksFor(report) : PLANNED;
   const head = shown ? headline(validation, checks) : null;
   const summary = checksSummary(checks, !!(shown && report), validating);
 
+  const title = head ? head.title : validating ? 'Checking every sample…' : recordingInProgress ? 'Waiting for Stop' : 'Not verified yet';
+  const text = head
+    ? head.summary
+    : recordingInProgress
+      ? 'A recording can only be verified once it is saved. Press Stop and verify at the top of the page, and verification runs straight away.'
+      : 'A separate validator program rebuilds the expected signal from its formula and checks the saved file against it.';
+
   return (
-    <section aria-label="Verify">
-      <h2 className="mb-1.5 px-4 text-[12px] font-medium text-label-2">Verify</h2>
-      <div className="overflow-hidden rounded-xl bg-surface" aria-live="polite" aria-busy={validating}>
-        <div className="flex items-start gap-3 px-4 pt-3.5 pb-3">
-          {head && <StatusIcon status={head.status} />}
-          <div className="min-w-0">
-            <div className={`text-[15px] font-semibold ${head ? statusTone(head.status) : 'text-label'}`}>
-              {head ? head.title : validating ? 'Checking every sample…' : automatic ? 'Verifies when you stop' : 'Not verified yet'}
-            </div>
-            <p className="mt-0.5 text-[13px] leading-snug text-label-2">
-              {head ? head.summary : 'A separate validator program rebuilds the expected signal from its formula and checks the saved file against it.'}
-            </p>
-          </div>
-        </div>
-
-        {(!validation || report || validating) && (
-          <details className="group border-t border-line">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-4 py-2 transition hover:bg-fill focus-visible:rounded-none focus-visible:outline-offset-[-2px] [&::-webkit-details-marker]:hidden">
-              <span className={`min-w-0 flex-1 text-[13px] font-medium ${summary.tone}`}>{summary.text}</span>
-              <span aria-hidden className={`flex gap-1 transition-opacity ${validating ? 'opacity-50' : ''}`}>
-                {checks.map((c) => (
-                  <StatusIcon key={c.label} status={c.status} size={12} />
-                ))}
-              </span>
-              <svg aria-hidden width="8" height="8" viewBox="0 0 8 8" className="shrink-0 text-label-3 transition-transform group-open:rotate-90" fill="currentColor">
-                <path d="M2 1l4 3-4 3z" />
-              </svg>
-            </summary>
-            <ul className={`border-t border-line py-1 transition-opacity ${validating ? 'opacity-50' : ''}`}>
-              {checks.map((c) => (
-                <CheckRow key={c.label} check={c} />
-              ))}
-            </ul>
-          </details>
-        )}
-
-        <div className="border-t border-line p-3">
-          <Button block variant={shown ? 'secondary' : 'primary'} disabled={validating || automatic} onClick={onVerify}>
-            {validating ? 'Verifying…' : shown ? 'Verify again' : 'Verify recording'}
-          </Button>
+    <section aria-label="Verify" className="border-b border-line py-4">
+      <h2 className="mb-3 px-5 text-[14px] font-semibold text-label">Verify</h2>
+      <div className="flex items-start gap-3 px-5" aria-live="polite" aria-busy={validating}>
+        {head && <StatusIcon status={head.status} />}
+        <div className="min-w-0">
+          <div className={`text-[16px] font-semibold ${head ? statusTone(head.status) : 'text-label'}`}>{title}</div>
+          <p className="mt-0.5 text-[13px] leading-snug text-label-2">{text}</p>
         </div>
       </div>
 
+      {(!validation || report || validating || recordingInProgress) && (
+        <details className="group mx-5 mt-3 overflow-hidden rounded-lg border border-line">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-4 py-2 transition hover:bg-subtle focus-visible:rounded-none focus-visible:outline-offset-[-2px] [&::-webkit-details-marker]:hidden">
+            <span className={`min-w-0 flex-1 text-[13px] font-medium ${summary.tone}`}>{summary.text}</span>
+            <span aria-hidden className={`flex gap-1 transition-opacity ${validating ? 'opacity-50' : ''}`}>
+              {checks.map((c) => (
+                <StatusIcon key={c.label} status={c.status} size={12} />
+              ))}
+            </span>
+            <svg aria-hidden width="8" height="8" viewBox="0 0 8 8" className="shrink-0 text-label-3 transition-transform group-open:rotate-90" fill="currentColor">
+              <path d="M2 1l4 3-4 3z" />
+            </svg>
+          </summary>
+          <ul className={`border-t border-line py-1 transition-opacity ${validating ? 'opacity-50' : ''}`}>
+            {checks.map((c) => (
+              <CheckRow key={c.label} check={c} />
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/* While recording, the only action is Stop, and it lives in the top bar. */}
+      {!recordingInProgress && (
+        <div className="mt-3 px-5">
+          <Button block size="lg" variant={shown ? 'secondary' : 'primary'} disabled={validating} onClick={onVerify}>
+            {validating ? 'Verifying…' : shown ? 'Verify again' : 'Verify recording'}
+          </Button>
+        </div>
+      )}
+
       {shown && report && (
-        <p className="num mt-1.5 px-4 text-[12px] leading-snug text-label-2">
+        <p className="num mt-2.5 px-5 text-[12px] leading-snug text-label-2">
           Checked {fmtInt(report.recordedValues)} samples in {report.elapsedSeconds < 0.1 ? 'under 0.1' : report.elapsedSeconds.toFixed(1)} s by a separate process, exit
           code {validation.exitCode}. From a terminal: <code className="font-mono text-[11px] text-label">node bin/sigval.ts FILE</code>
         </p>

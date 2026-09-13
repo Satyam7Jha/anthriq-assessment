@@ -49,10 +49,16 @@ export function createRouter({ view, transport, session, defaults, limits, log }
     const v = view.open();
     const q = url.searchParams;
     const channels = (q.get('channels') ?? '').split(',').filter(Boolean).map(Number).filter((c) => Number.isInteger(c) && c >= 0 && c < v.hdr.channelCount);
-    const span = Math.max(1, Math.round(Number(q.get('seconds') ?? 10) * v.hdr.sampleRateExactHz));
+    const requested = Math.max(1, Math.round(Number(q.get('seconds') ?? 10) * v.hdr.sampleRateExactHz));
+    const columns = Math.max(1, Math.min(Math.floor(Number(q.get('columns') ?? 1000)) || 1000, 4096));
+    // Whole samples per column on an absolute grid: as the window moves, a column keeps exactly the
+    // same samples, so the trace slides instead of every column's envelope changing a little each frame.
+    const samplesPerColumn = Math.max(1, Math.round(requested / columns));
+    const span = samplesPerColumn * columns;
     // Live follows the newest committed data; otherwise the window is centred on the cursor.
     const from = transport.mode === 'live' ? v.extent.endFrame - span : Math.min(transport.position(v) - Math.floor(span / 2), v.extent.endFrame - span);
-    const body = frames.render(v, { fromFrame: Math.max(0, from), spanFrames: span, channels, columns: Number(q.get('columns') ?? 1000) }, { transport: transport.snapshot(v), recorder: view.health() });
+    const aligned = Math.max(0, Math.floor(from / samplesPerColumn) * samplesPerColumn);
+    const body = frames.render(v, { fromFrame: aligned, spanFrames: span, channels, columns, samplesPerColumn }, { transport: transport.snapshot(v), recorder: view.health() });
     res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' });
     res.end(body);
   }

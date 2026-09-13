@@ -34,8 +34,8 @@ export function TransportBar({ playback: p, durationSeconds, windowSeconds, onWi
 
       <span className="num w-14 shrink-0 text-right text-[13px]" aria-live="off">
         {showLive ? (
-          <span className="inline-flex items-center gap-1.5 font-medium text-red">
-            <span className="size-1.5 rounded-full bg-red" />
+          <span className="inline-flex items-center gap-1.5 font-medium text-accent">
+            <span className="size-1.5 animate-pulse rounded-full bg-accent" />
             Live
           </span>
         ) : (
@@ -58,8 +58,8 @@ export function TransportBar({ playback: p, durationSeconds, windowSeconds, onWi
       <span className="num w-14 shrink-0 text-[13px] text-label-2">{fmtTime(durationSeconds)}</span>
 
       {!p.isLive && p.recordingOpen && (
-        <Button className="h-7 text-red" onClick={p.goLive}>
-          <span className="size-1.5 rounded-full bg-red" />
+        <Button onClick={p.goLive}>
+          <span className="size-1.5 rounded-full bg-accent" />
           Go live
         </Button>
       )}

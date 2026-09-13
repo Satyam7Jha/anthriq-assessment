@@ -24,13 +24,14 @@ All measured on the target machine. Method and raw artifacts in [Measured perfor
 
 | Claim | Measured |
 |---|---|
-| Sample loss over a sustained run **with the viewer attached throughout** | **0** — validator `PASS`, exit 0 |
-| Generator pacing deviation | **14 frames in 1,086,560 = 12.9 ppm** (3.5 ms over 4.5 min) |
-| Tick lag | **p50 ≤ 16 µs, p99 ≤ 32 µs**, 3 late ticks in 54,328 |
-| Recorder memory | **127.2 MiB, flat** — every allocation happens before the first byte is accepted |
-| Ring-buffer peak utilisation | **0.76 %** of a 131-second absorption window |
+| One-hour run, 460,800,000 samples | **0 missing, 0 duplicated, 0 incorrect** — validator `PASS`, exit 0 |
+| Sample loss over a 4.5-minute run **with the viewer attached throughout** | **0** — validator `PASS`, exit 0 |
+| Generator pacing deviation over one hour | **2 frames in 14,400,000 = 0.14 ppm** |
+| Tick lag over one hour | **p50 ≤ 16 µs, p99 ≤ 64 µs**; 252 late ticks in 720,000, none needing a resync |
+| Recorder memory over one hour | **69–133 MiB, no upward trend** — first 10 min average 109 MiB, last 10 min 99 MiB |
+| Ring-buffer peak utilisation over one hour | **0.76 %** of a 131-second absorption window |
 | Generator pacing while the recorder is **SIGSTOPped for 10 s** | **unchanged** — deviation stays within one tick, 0 resyncs |
-| Validator throughput / memory | **~90 M values/s**, **86.7 MiB peak, flat** from a 4 MiB to a 497 MiB file |
+| Validator throughput / memory | **80 M values/s** on the 1.72 GiB one-hour file (5.8 s), **84.9 MiB peak**; flat from a 4 MiB file to that one |
 | Channel-subset read, 2 of 32 | **15.97× fewer bytes**, measured == closed-form prediction exactly |
 | Seek cost | **1 pread, 64 bytes, ~11 µs**, O(1) |
 | Independent Python reader written from the spec alone | **identical values to 9 decimals**, 272/272 blocks verified |
@@ -489,15 +490,27 @@ bar, one inspector that answers questions in the order they get asked: *is the r
 (Verify, at the top), *what is it?* (Recording), *is acquisition healthy?* (Health), *how much am I
 looking at?* (Channels shown: All · 16 · 8 · 4). Technical detail sits behind one disclosure. Rows
 auto-fit their own range, so there is no scale control and a trace can never spill into its neighbour.
-Three keys: Space plays or pauses, ← / → skip ten seconds. It follows the system light/dark setting,
-and the only saturated colours are the accent, green and red — so lost samples or a failed
-verification are the one thing on screen that draws the eye.
+Three keys: Space plays or pauses, ← / → skip ten seconds. It is light-themed whatever the system
+setting, since dark traces on a light ground read best, and the only saturated colours are the
+accent, green and red — so lost samples or a failed verification are the one thing on screen that
+draws the eye.
 
 **The hard parts are kept hard, just out of sight:**
 
-- **Zero React re-renders per frame.** Sample data lives in a ref outside the render cycle; the canvas
-  reads it from a `requestAnimationFrame` loop, one `Path2D` per channel. Only low-frequency numbers
-  go through state, at most four times a second.
+- **Zero React re-renders per frame.** Sample data lives in a ref outside the render cycle; one
+  `requestAnimationFrame` loop draws a 2D canvas and redraws only while something moves. A draw is one
+  path per channel: **0.25 ms** for 16 channels at 1440×900. Only low-frequency numbers go through
+  state, at most four times a second.
+- **Motion at the display's frame rate, not the network's.** Frames arrive about twenty times a
+  second; each carries where the window is and how fast it is moving (1× while a recording grows, the
+  playback speed in review, 0 when paused), and the view glides between them, easing out any
+  correction. The server sends two seconds more than the visible window, so the glide never runs past
+  the data. A live recording is committed in one-second blocks, so the live view trails the newest data
+  by about a block and scrolls continuously instead of in steps.
+- **Envelopes that read as lines.** Each channel is drawn as one band, forward through the column
+  maxima and back through the minima, so consecutive columns join: a steep edge is drawn, a slope stays
+  smooth, and a single-sample spike still reaches its full height. Each row eases toward its fitted
+  range, so the scale settles instead of twitching.
 - **Min/max envelope decimation, server-side.** At 4 kHz on a 1,000 px trace each pixel column covers
   40 samples. Subsampling shows a transient only if it lands on a sample point and averaging erases it;
   a min/max envelope means **a single-sample spike still extends its column and can never be hidden**.
@@ -509,7 +522,12 @@ verification are the one thing on screen that draws the eye.
   `pread`s only for the selected channels, and the inspector footnote reports the saving and whether
   the measured byte count matches the closed-form prediction.
 - **Lost samples are drawn, not just counted** — a soft red band across every row at the exact time.
-- **Verification runs as a separate process**, and the verdict and exit code are shown as returned.
+- **Verification runs as a separate process**, and its report is shown as the five checks it makes —
+  sample values, sequence, checksums, drop log, clean close — with the first position of any failure
+  and the exit code as returned.
+- **What is on screen can be taken away**: the `.sigb` file as recorded, its `.json` metadata, or the
+  visible window and channels as CSV (capped at 60 s and streamed, so a large request cannot exhaust
+  the server).
 
 ### It cannot affect acquisition, structurally
 
@@ -523,7 +541,8 @@ blocks rather than the live socket. A lower-latency variant would need a second 
 generator's write path, which is precisely the coupling the brief forbids.
 
 The 4.5-minute run in the headline table had the viewer attached and rendering for its entire
-duration, and still validated `PASS` with zero loss.
+duration, and still validated `PASS` with zero loss; the one-hour run had it following the file for
+its last minutes, with the same result.
 
 ---
 
@@ -532,6 +551,43 @@ duration, and still validated `PASS` with zero loss.
 **Method.** Every figure below comes from a run on the target machine, on AC power, via the committed
 scripts named. Timing uses `process.hrtime.bigint()` (a monotonic clock, `CLOCK_UPTIME_RAW` on
 Darwin); memory uses `process.memoryUsage.rss()` sampled by the recorder itself.
+
+### One-hour acceptance run — 3,600 s, 32 ch × 4,000 Hz
+
+Recorder and generator started from the command line as in [Quick start](#quick-start), on AC power
+with idle sleep held off by `caffeinate`; recorder RSS sampled externally with `ps` every 10 s
+(359 samples); validator timed with `/usr/bin/time -l`.
+
+```
+Expected: 460,800,000 samples
+Recorded: 460,800,000 samples
+Missing:   0
+Duplicated: 0
+Incorrect:  0
+Result: PASS
+exit=0
+validated 460,800,000 values in 5.76 s (80,008,071 values/s), CRC on    maximum resident set size 84.9 MiB
+```
+
+```
+generator — final pacing report            recorder — final report
+  elapsed          3600.000 s                size          1,843,434,520 B (1.7168 GiB)
+  emitted          14,400,000 frames         frames        14,400,000 = 460,800,000 values
+  expected (clock) 14,399,998 frames         blocks        3,600
+  deviation        2 frames (0.139 ppm)      ring peak     0.76% of 64 MiB (131.1 s)
+  tick lag         p50 ≤16 µs, p99 ≤64 µs    write latency max 8.88 ms
+                   max 54,412 µs             fsyncs        359 (max 24.72 ms)
+  late ticks       252 of 720,000            gaps/dups     0 / 0 frames
+  pacing resyncs   0                         crc failures  0
+  ring peak        11/1024 blocks (1.07%)    dropped       0 frames in 0 ranges
+  drain stalls     0, peak socket queue 23 KB finalised    yes
+  dropped          0 frames
+```
+
+Recorder RSS moved between 69 and 133 MiB in a garbage-collection sawtooth with no upward trend: the
+first ten minutes averaged 109 MiB and the last ten 99 MiB. The worst single tick was 54 ms late and
+cost nothing — the deadline schedule absorbed it, which is why the deviation stayed at two frames.
+For the last few minutes the viewer was also following the file as it was written.
 
 ### Sustained acquisition — 271.6 s, 32 ch × 4,000 Hz, viewer attached throughout
 
@@ -560,7 +616,7 @@ point.
 
 | Process | Measured | Grows with run duration? |
 |---|---:|---|
-| Recorder | **103–122 MiB**, GC sawtooth | **No** — 64 MiB ring + 2 × 512 KB block buffers + parser carry, all preallocated before the first byte is accepted |
+| Recorder | **69–133 MiB over one hour**, GC sawtooth, no trend | **No** — 64 MiB ring + 2 × 512 KB block buffers + parser carry, all preallocated before the first byte is accepted |
 | Validator | **86.7 MiB** | **No** — 86.8 / 86.6 / 86.6 MiB validating 4 MiB, 147 MiB and 497 MiB files |
 | Reader (32 ch) | 512 KB working set | **No** — scales with the window and subset, not the recording |
 
@@ -585,7 +641,7 @@ so via a header flag.
 | CRC-32C | 0.99 ms per 518,400 B = **526 MB/s**; check value `0xE3069283` verified |
 | Validation | ~90 M values/s |
 | Seek | ~11 µs, 1 pread, 64 B |
-| Canvas draw | 0.90 ms/frame |
+| Trace draw, 16 channels at 1440×900 (Canvas 2D) | 0.25 ms per display frame |
 
 ### Reproducing the evidence
 
@@ -658,7 +714,7 @@ Full option tables: `node bin/<tool>.ts --help`.
 | **fsync every 10 s**, not per block | Bounds data at risk to ~5 MB rather than putting an APFS stall into the write path 3,600 times an hour. The interval is in the header so a reader knows the window. |
 | **float32** rather than int24 | Departs from real ADC hardware, to keep the validator's comparison exact rather than tolerance-based. Named explicitly rather than chosen silently. |
 | **UI follows committed blocks** | ~1.1 s display latency, in exchange for the viewer being structurally incapable of affecting acquisition. |
-| **Canvas 2D** rather than WebGL | Gives up ~10× of rendering headroom we do not need, to avoid shader code and context-loss recovery. Measured 0.90 ms/frame leaves ample room. |
+| **Hand-written Canvas 2D** rather than a charting library | About 300 lines of drawing code to own, in exchange for smooth motion: a charting library measured 12.7 ms per update here, which caps motion at the data rate, while the canvas draws in 0.25 ms and glides at the display rate. The bundle also dropped from 680 KB to 256 KB. |
 
 ### Bugs found during development
 
@@ -718,17 +774,15 @@ and a `setTimeout(0)` spin that libuv clamps to 1 ms.
   right next step for many simultaneous viewers.
 - **No physical units.** The header has no `vref`, per-channel gain or unit field, so values are
   dimensionless. The 3,572 reserved header bytes are where they belong.
-- **The one-hour acceptance run and the duration-sweep memory regression** described in
-  `MEASUREMENT-PLAN.md` §3 and §6 are specified but not yet executed; the longest run measured here is
-  4.5 minutes. The memory argument currently rests on the *structural* claim (everything preallocated
-  before ingest) plus a flat observed RSS, not on a slope with a confidence interval across a 240×
-  duration range.
+- **Nothing longer than one hour has been measured.** The one-hour run shows no memory growth and
+  every buffer is allocated before ingest, but there is no multi-hour RSS regression with a confidence
+  interval on its slope.
 - **`--test-concurrency=1` is pinned** in `npm test`: the transport test holds a socket with megabytes
   queued, and running it concurrently with the timing tests made both flaky.
 
 ## Future work
 
-- Execute the one-hour and 4-hour runs and report the RSS slope with a confidence interval.
+- 4-hour and 24-hour runs, reporting the RSS slope with a confidence interval.
 - `sigctl export --format edf` — export a completed recording to EDF+ with explicit, documented
   per-channel `float32 → int16` scaling. Export at rest is the right place for a lossy interchange
   step; the acquisition path is the wrong place.

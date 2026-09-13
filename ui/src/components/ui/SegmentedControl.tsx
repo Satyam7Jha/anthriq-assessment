@@ -13,7 +13,7 @@ export interface SegmentedControlProps<T extends string> {
 /** A single choice among a few options, exposed to assistive tech as a radio group. */
 export function SegmentedControl<T extends string>({ label, options, value, onChange }: SegmentedControlProps<T>) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-lg bg-fill p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex shrink-0 overflow-hidden rounded-lg border border-line">
       {options.map((o) => {
         const selected = o.value === value;
         return (
@@ -23,7 +23,7 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             role="radio"
             aria-checked={selected}
             onClick={() => onChange(o.value)}
-            className={`num h-7 flex-1 rounded-[7px] text-[12px] font-medium transition ${selected ? 'bg-surface text-label shadow-[0_1px_3px_rgba(0,0,0,0.12)]' : 'text-label-2 hover:text-label'}`}
+            className={`num h-8 min-w-11 px-3 text-[13px] font-medium transition not-first:border-l not-first:border-line ${selected ? 'bg-accent text-white' : 'bg-surface text-label-2 hover:bg-subtle hover:text-label'}`}
           >
             {o.label}
           </button>

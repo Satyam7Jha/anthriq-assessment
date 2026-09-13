@@ -8,21 +8,28 @@
    Contrast: --label (primary text) and --label-2 (secondary text) meet WCAG AA against --surface.
    --label-3 is for decoration that carries no information on its own (tick labels, rule lines). */
 :root {
-  --bg: #f5f5f7;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --fill: rgba(120, 120, 128, 0.12);
-  --fill-strong: rgba(120, 120, 128, 0.2);
-  --line: rgba(60, 60, 67, 0.12);
-  --label: #1d1d1f;
-  --label-2: #5c5c63;
-  --label-3: rgba(60, 60, 67, 0.5);
-  --accent: #0066cc;
-  --green: #1f7a35;
-  --orange: #a35f00;
-  --red: #c4001a;
-  --focus: rgba(0, 102, 204, 0.45);
-  --trace: #3a3a3c;
+  --subtle: #f8f9fb;
+  --fill: rgba(99, 102, 120, 0.08);
+  --fill-strong: rgba(99, 102, 120, 0.16);
+  --line: #e7e8ec;
+  --label: #16171d;
+  --label-2: #5b5e6b;
+  --label-3: rgba(60, 62, 75, 0.45);
+  --accent: #4f46e5;
+  --accent-soft: #eef0ff;
+  --green: #15803d;
+  --green-soft: #ecfdf3;
+  --orange: #b45309;
+  --orange-soft: #fff7ed;
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --focus: rgba(79, 70, 229, 0.45);
+  --trace: #2c2c2e;
   --trace-grid: rgba(60, 60, 67, 0.07);
+  --row-band: rgba(60, 60, 67, 0.028);
+  --crosshair: rgba(60, 60, 67, 0.32);
   --gap: rgba(196, 0, 26, 0.09);
   --gap-edge: rgba(196, 0, 26, 0.55);
   color-scheme: light;
@@ -31,6 +38,11 @@
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-accent-soft: var(--accent-soft);
+  --color-green-soft: var(--green-soft);
+  --color-orange-soft: var(--orange-soft);
+  --color-red-soft: var(--red-soft);
   --color-fill: var(--fill);
   --color-fill-strong: var(--fill-strong);
   --color-line: var(--line);

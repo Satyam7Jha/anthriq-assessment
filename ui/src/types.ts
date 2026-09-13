@@ -74,6 +74,8 @@ export interface FrameInfo {
   from: number;
   frames: number;
   columns: number;
+  /** Every column covers exactly this many samples, starting from `from`, which is a multiple of it. */
+  samplesPerColumn: number;
   channels: number[];
   sampleRateHz: number;
   totalFrames: number;
@@ -87,10 +89,24 @@ export interface FrameInfo {
 }
 
 /** The pixel half: channels x columns x [min, max]; NaN where there is no data. */
-export interface Envelopes {
+export interface EnvelopeData {
   channels: number[];
   columns: number;
   data: Float32Array;
+}
+
+/** One frame as the trace view uses it: the envelopes, where they sit in time, and how the view is moving. */
+export interface Envelopes extends EnvelopeData {
+  /** Start of the data, and the time each column covers. */
+  fromSeconds: number;
+  columnSeconds: number;
+  /** End of the recording's timeline when the frame was made. */
+  endSeconds: number;
+  sampleRateHz: number;
+  transport: TransportState;
+  finalised: boolean;
+  /** performance.now() when the frame arrived, to extrapolate motion from. */
+  receivedAt: number;
 }
 
 /** Where a discrepancy was first found. Channels are 0-based here, as in the file. */

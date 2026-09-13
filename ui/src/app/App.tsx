@@ -1,16 +1,28 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { EmptyMeta, Validation } from '../types';
+import type { EmptyMeta, FrameInfo, Marker, Validation } from '../types';
 import { api } from '../api/client';
 import { useRecording } from '../hooks/useRecording';
 import { useSession } from '../hooks/useSession';
 import { useFrameStream } from '../hooks/useFrameStream';
 import { usePlayback } from '../hooks/usePlayback';
 import { useKeyboard } from '../hooks/useKeyboard';
+import { SegmentedControl } from '../components/ui';
 import { Toolbar } from '../features/recording/Toolbar';
 import { EmptyState } from '../features/recording/EmptyState';
+import { RecordingBanner } from '../features/recording/RecordingBanner';
+import { StatsStrip } from '../features/overview/StatsStrip';
 import { TraceView } from '../features/trace/TraceView';
 import { TransportBar } from '../features/transport/TransportBar';
 import { Inspector } from '../features/inspector/Inspector';
+
+const NO_MARKERS: Marker[] = [];
+
+/** Where the visible window starts, by the same rule the server and the trace view use: live follows the end, review centres the cursor. */
+function visibleStart(info: FrameInfo, windowSeconds: number): number {
+  const end = info.endFrame / info.sampleRateHz;
+  if (info.transport.mode === 'live') return Math.max(0, end - windowSeconds);
+  return Math.max(0, Math.min(info.transport.position / info.sampleRateHz - windowSeconds / 2, end - windowSeconds));
+}
 
 /** Composition only: state lives in hooks, controls in features, visual primitives in components/ui. */
 export function App() {
@@ -73,62 +85,69 @@ export function App() {
 
   // The timeline runs to the last frame index, so gaps (a sleep, a stalled disk) take real space on it.
   const duration = recording ? (frames.info?.endFrame ?? recording.endFrame) / recording.sampleRateHz : 0;
-  const windowStart = frames.info ? frames.info.from / frames.info.sampleRateHz : 0;
-  const markers = (recording?.markers ?? []).filter((m) => m.onsetSeconds < windowStart + windowSeconds && m.onsetSeconds + m.durationSeconds > windowStart);
+  const windowStart = frames.info ? visibleStart(frames.info, windowSeconds) : 0;
+  const markers = recording?.markers ?? NO_MARKERS;
+  const channelOptions = recording
+    ? [recording.channelCount, 16, 8, 4].filter((n, i, all) => n <= recording.channelCount && all.indexOf(n) === i).map((n) => ({ value: String(n), label: n === recording.channelCount ? 'All' : String(n) }))
+    : [];
+  const onStart = () => void start();
+  const onStop = () => void stop();
 
   return (
-    <div className="flex h-full flex-col">
-      <Toolbar
-        recording={recording}
-        state={state}
-        seconds={duration}
-        limitSeconds={meta.limits.maxRecordingSeconds}
-        inspectorOpen={inspectorOpen}
-        onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
-        onStart={() => void start()}
-        onStop={() => void stop()}
-      />
+    <div className="flex h-full flex-col bg-bg">
+      <Toolbar recording={recording} state={state} seconds={duration} inspectorOpen={inspectorOpen} onToggleInspector={() => setInspectorOpen(!inspectorOpen)} onStart={onStart} onStop={onStop} />
 
       {!recording ? (
-        <EmptyState meta={meta as EmptyMeta} starting={state === 'recording'} error={session?.error ?? null} onStart={() => void start()} />
+        <EmptyState meta={meta as EmptyMeta} starting={state === 'recording'} error={session?.error ?? null} onStart={onStart} />
       ) : (
-        <div className="flex min-h-0 flex-1">
-          <main className="flex min-w-0 flex-1 flex-col p-4">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_0_0_0.5px_var(--line)]">
-              <div ref={traceBox} className="min-h-0 flex-1 px-2 pt-4 pb-1">
-                <TraceView envelopesRef={frames.envelopesRef} markers={markers} windowStart={windowStart} windowSeconds={windowSeconds} onFrameTime={setFrameMs} />
+        <>
+          <StatsStrip meta={recording} info={frames.info} state={state} validation={validation} limitSeconds={meta.limits.maxRecordingSeconds} />
+          <div className="flex min-h-0 flex-1">
+            <main className="flex min-w-0 flex-1 flex-col">
+              <RecordingBanner state={state} />
+              <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3">
+                <h2 className="text-[15px] font-semibold">Signal</h2>
+                <span className="num text-[13px] text-label-2">
+                  {channels.length === recording.channelCount ? `All ${recording.channelCount} channels` : `${channels.length} of ${recording.channelCount} channels`} · each row scaled to
+                  its own range · hover for values
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-[13px] text-label-2">Channels</span>
+                  <SegmentedControl label="Channels shown" options={channelOptions} value={String(Math.min(shown, recording.channelCount))} onChange={(v) => setShown(Number(v))} />
+                </div>
               </div>
-              <div className="border-t border-line">
+              <div ref={traceBox} className="min-h-0 flex-1 px-3 pt-3 pb-1">
+                <TraceView envelopesRef={frames.envelopesRef} markers={markers} windowSeconds={windowSeconds} onFrameTime={setFrameMs} />
+              </div>
+              <div className="shrink-0 border-t border-line">
                 <TransportBar playback={playback} durationSeconds={duration} windowSeconds={windowSeconds} onWindowSeconds={setWindowSeconds} />
               </div>
-            </div>
-          </main>
+            </main>
 
-          {inspectorOpen && (
-            <aside aria-label="Inspector" className="w-[340px] shrink-0 overflow-y-auto">
-              {session?.error && (
-                <p role="alert" className="mx-5 mt-6 rounded-xl bg-surface px-4 py-3 text-[13px] text-red">
-                  {session.error}
-                </p>
-              )}
-              <Inspector
-                meta={recording}
-                info={frames.info}
-                shown={shown}
-                onShown={setShown}
-                channels={channels}
-                windowStart={windowStart}
-                windowSeconds={windowSeconds}
-                validation={validation}
-                validating={validating || state === 'verifying'}
-                verifyAutomatically={state === 'recording' || state === 'stopping'}
-                onVerify={() => void verify()}
-                frameMs={frameMs}
-                seekCost={playback.seekCost}
-              />
-            </aside>
-          )}
-        </div>
+            {inspectorOpen && (
+              <aside aria-label="Details" className="w-[380px] shrink-0 overflow-y-auto border-l border-line">
+                {session?.error && (
+                  <p role="alert" className="border-b border-line bg-red-soft px-5 py-3 text-[13px] text-red">
+                    {session.error}
+                  </p>
+                )}
+                <Inspector
+                  meta={recording}
+                  info={frames.info}
+                  channels={channels}
+                  windowStart={windowStart}
+                  windowSeconds={windowSeconds}
+                  validation={validation}
+                  validating={validating || state === 'verifying'}
+                  recordingInProgress={state === 'recording' || state === 'stopping'}
+                  onVerify={() => void verify()}
+                  frameMs={frameMs}
+                  seekCost={playback.seekCost}
+                />
+              </aside>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

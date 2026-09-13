@@ -11,10 +11,12 @@ import { envelope } from '../viz/decimate.ts';
 import type { OpenView } from './recording-view.ts';
 
 export interface FrameRequest {
+  /** A multiple of samplesPerColumn, so columns sit on an absolute grid. */
   fromFrame: number;
   spanFrames: number;
   channels: number[];
   columns: number;
+  samplesPerColumn: number;
 }
 
 export function createFrameRenderer() {
@@ -45,12 +47,13 @@ export function createFrameRenderer() {
         filled[k] = Math.max(filled[k], at + chunk.frameCount);
       }
     }
+    const spc = Math.max(1, Math.floor(req.samplesPerColumn));
     for (let k = 0; k < C; k++) {
       if (filled[k] === 0) continue;
-      // Columns relative to the REQUESTED span: a live recording shorter than the window draws on the
-      // left of the axis instead of being stretched across it.
-      const used = Math.max(1, Math.min(cols, Math.round((filled[k] / req.spanFrames) * cols)));
-      envelope(scratch.subarray(k * frames, k * frames + filled[k]), used, envOut.subarray(k * cols * 2, (k * cols + used) * 2));
+      // Whole columns of samplesPerColumn from the (grid-aligned) start: a partly filled window uses
+      // only the columns it has data for, and never re-bins them.
+      const used = Math.max(1, Math.min(cols, Math.ceil(filled[k] / spc)));
+      envelope(scratch.subarray(k * frames, k * frames + filled[k]), used, envOut.subarray(k * cols * 2, (k * cols + used) * 2), spc);
     }
 
     const info = {
@@ -58,6 +61,7 @@ export function createFrameRenderer() {
       from,
       frames,
       columns: cols,
+      samplesPerColumn: Math.max(1, Math.floor(req.samplesPerColumn)),
       channels: req.channels,
       sampleRateHz: hdr.sampleRateExactHz,
       totalFrames: extent.totalFrames,
