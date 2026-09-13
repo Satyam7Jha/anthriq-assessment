@@ -492,15 +492,34 @@ function main() {
     }
   });
 
-  server.listen(port, () => {
+  // If the default port is taken (usually an earlier viewer still running), try the next few rather
+  // than crash with a stack trace. An explicit --port is respected exactly.
+  const explicitPort = opts.port !== undefined;
+  let attempt = 0;
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && !explicitPort && attempt < 10) {
+      attempt++;
+      server.listen(port + attempt);
+      return;
+    }
+    if (err.code === 'EADDRINUSE') {
+      process.stderr.write(`\n  Port ${port + attempt} is already in use. Stop the other viewer, or choose one with --port.\n\n`);
+      process.exit(1);
+    }
+    throw err;
+  });
+  server.on('listening', () => {
+    const actual = server.address().port;
     log.info('listening', {
-      url: `http://localhost:${port}`,
+      url: `http://localhost:${actual}`,
       file: filePath,
       recordingsDir,
       mode: 'reads recordings O_RDONLY; starts and stops recordings as separate processes',
     });
-    process.stderr.write(`\n  sigacq:  http://localhost:${port}\n\n`);
+    if (actual !== port) process.stderr.write(`\n  port ${port} was busy, using ${actual}`);
+    process.stderr.write(`\n  sigacq:  http://localhost:${actual}\n\n`);
   });
+  server.listen(port);
 
   // Never leave orphaned acquisition processes behind: stop a running recording cleanly on exit.
   let quitting = false;
