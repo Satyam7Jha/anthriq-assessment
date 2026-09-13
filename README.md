@@ -26,7 +26,7 @@ All measured on the target machine. Method and raw artifacts in [Measured perfor
 | Recorder memory | **127.2 MiB, flat** — every allocation happens before the first byte is accepted |
 | Ring-buffer peak utilisation | **0.76 %** of a 131-second absorption window |
 | Generator pacing while the recorder is **SIGSTOPped for 10 s** | **unchanged** — deviation stays within one tick, 0 resyncs |
-| Validator throughput / memory | **97.2 M values/s**, **60.5 MiB constant** regardless of file size |
+| Validator throughput / memory | **~90 M values/s**, **86.7 MiB peak, flat** from a 4 MiB to a 497 MiB file |
 | Channel-subset read, 2 of 32 | **15.97× fewer bytes**, measured == closed-form prediction exactly |
 | Seek cost | **1 pread, 64 bytes, ~11 µs**, O(1) |
 | Independent Python reader written from the spec alone | **identical values to 9 decimals**, 272/272 blocks verified |
@@ -346,7 +346,7 @@ node bin/sigval.ts FILE.sigb            # 0 PASS · 1 FAIL · 2 PASS(TRUNCATED) 
 Single streaming pass, **O(1) memory**: one reused block buffer, one 64-byte header buffer, a 4-byte
 scratch, and a dozen counters. Neither the recording nor the expected signal is ever materialised —
 the expected signal is recomputed one value at a time from the closed-form function. Measured at
-**97.2 M values/s with 60.5 MiB peak RSS**, constant regardless of file size; a one-hour recording
+**~90 M values/s with 86.7 MiB peak RSS**, flat across a 124× range of file sizes; a one-hour recording
 validates in about five seconds.
 
 `Missing` is derived from **sequence gaps**, not from `Expected − Recorded`, because those two can
@@ -516,8 +516,15 @@ point.
 | Process | Measured | Grows with run duration? |
 |---|---:|---|
 | Recorder | **127.2 MiB** | **No** — 64 MiB ring + 2 × 512 KB block buffers + parser carry, all preallocated before the first byte is accepted |
-| Validator | **60.5 MiB** | **No** — one block buffer regardless of a 132 MiB or 41 GiB input |
+| Validator | **86.7 MiB** | **No** — 86.8 / 86.6 / 86.6 MiB validating 4 MiB, 147 MiB and 497 MiB files |
 | Reader (32 ch) | 512 KB working set | **No** — scales with the window and subset, not the recording |
+
+**Where that memory goes.** Most of it is the runtime, not the workload. Node running a TypeScript
+file directly sits at **66 MiB before doing anything** (44 MiB for plain JavaScript — the difference is
+the built-in type-stripping loader). The validator's own working set is therefore about 20 MiB: one
+reused 512 KB block buffer plus V8 heap. What matters for the brief is the slope, and it is zero —
+peak RSS was identical to within 0.2 MiB validating files 124× apart in size. (The recorder figure
+above was measured before the TypeScript migration; expect it to carry the same ~22 MiB loader offset.)
 
 The drop ledger is bounded at 65,536 entries with adjacent-entry coalescing, because **an unbounded
 ledger is itself memory proportional to elapsed time** — exactly what the brief rules out. If the cap
@@ -530,7 +537,7 @@ so via a header flag.
 |---|---|
 | Signal generation | 1.04 ms per 128,000 values (0.10 % of one core) |
 | CRC-32C | 0.99 ms per 518,400 B = **526 MB/s**; check value `0xE3069283` verified |
-| Validation | 97.2 M values/s |
+| Validation | ~90 M values/s |
 | Seek | ~11 µs, 1 pread, 64 B |
 | Canvas draw | 0.90 ms/frame |
 
