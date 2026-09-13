@@ -6,7 +6,7 @@ self-describing binary format with zero sample loss and flat memory, and retriev
 verifiable afterwards. Plus a biosignal review viewer that renders it without ever being able to
 touch the acquisition path.
 
-**Live demo:** https://sigacq.onrender.com — press Record, then Stop; the recording is validated
+**Live demo:** https://the-odyssey.onrender.com — press Record, then Stop; the recording is validated
 automatically. It runs on Render's free tier, so the first request after a quiet spell can take about
 a minute, and a shared fraction of a CPU is not the machine the figures below were measured on.
 
