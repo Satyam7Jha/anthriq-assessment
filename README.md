@@ -515,7 +515,7 @@ point.
 
 | Process | Measured | Grows with run duration? |
 |---|---:|---|
-| Recorder | **127.2 MiB** | **No** — 64 MiB ring + 2 × 512 KB block buffers + parser carry, all preallocated before the first byte is accepted |
+| Recorder | **103–122 MiB**, GC sawtooth | **No** — 64 MiB ring + 2 × 512 KB block buffers + parser carry, all preallocated before the first byte is accepted |
 | Validator | **86.7 MiB** | **No** — 86.8 / 86.6 / 86.6 MiB validating 4 MiB, 147 MiB and 497 MiB files |
 | Reader (32 ch) | 512 KB working set | **No** — scales with the window and subset, not the recording |
 
@@ -523,8 +523,9 @@ point.
 file directly sits at **66 MiB before doing anything** (44 MiB for plain JavaScript — the difference is
 the built-in type-stripping loader). The validator's own working set is therefore about 20 MiB: one
 reused 512 KB block buffer plus V8 heap. What matters for the brief is the slope, and it is zero —
-peak RSS was identical to within 0.2 MiB validating files 124× apart in size. (The recorder figure
-above was measured before the TypeScript migration; expect it to carry the same ~22 MiB loader offset.)
+peak RSS was identical to within 0.2 MiB validating files 124× apart in size. The recorder shows the same picture: over a 60-second TypeScript run its RSS moved in a V8 garbage-
+collection sawtooth between 103 and 122 MiB and returned to 105 MiB, with no upward trend — every
+buffer it uses is allocated before the first byte arrives.
 
 The drop ledger is bounded at 65,536 entries with adjacent-entry coalescing, because **an unbounded
 ledger is itself memory proportional to elapsed time** — exactly what the brief rules out. If the cap
