@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { Envelopes, FrameInfo } from '../types';
-import { GUTTER, TRACE_PAD_SECONDS } from '../features/trace/TraceView';
+import { GUTTER, TRACE_PAD_SECONDS } from '../features/trace/motion';
 
 const FRAME_INTERVAL_MS = 50;
 const STATE_INTERVAL_MS = 250;

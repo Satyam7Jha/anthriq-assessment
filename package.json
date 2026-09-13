@@ -24,6 +24,7 @@
     "ui:watch": "node ui/build.ts --watch"
   },
   "devDependencies": {
+    "@qiun/ucharts": "^2.5.0-20230101",
     "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^24.13.4",
     "@types/react": "^19.3.0",

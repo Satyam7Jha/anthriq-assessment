@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Button, StatusIcon, statusTone, type Status } from '../../components/ui';
 import { fmtInt, fmtPosition } from '../../lib/format';
 import type { Discrepancy, Validation, ValidationReport } from '../../types';
@@ -127,6 +128,23 @@ export function VerifySection({ validation, validating, recordingInProgress, onV
   const head = shown ? headline(validation, checks) : null;
   const summary = checksSummary(checks, !!(shown && report), validating);
 
+  // The checks open by themselves when a verification this page was waiting for finishes, and close
+  // while a recording runs or a check is in progress. A result the server remembers from before the
+  // page loaded stays closed. Between those moments the person decides.
+  const resultReady = !!(shown && report);
+  const [open, setOpen] = useState(false);
+  const [awaiting, setAwaiting] = useState(false);
+  useEffect(() => {
+    if (!validating && !recordingInProgress) return;
+    setAwaiting(true);
+    setOpen(false);
+  }, [validating, recordingInProgress]);
+  useEffect(() => {
+    if (!resultReady || !awaiting) return;
+    setOpen(true);
+    setAwaiting(false);
+  }, [resultReady, awaiting]);
+
   const title = head ? head.title : validating ? 'Checking every sample…' : recordingInProgress ? 'Waiting for Stop' : 'Not verified yet';
   const text = head
     ? head.summary
@@ -146,7 +164,7 @@ export function VerifySection({ validation, validating, recordingInProgress, onV
       </div>
 
       {(!validation || report || validating || recordingInProgress) && (
-        <details className="group mx-5 mt-3 overflow-hidden rounded-lg border border-line">
+        <details className="group mx-5 mt-3 overflow-hidden rounded-lg border border-line" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
           <summary className="flex min-h-10 cursor-pointer list-none items-center gap-3 px-4 py-2 transition hover:bg-subtle focus-visible:rounded-none focus-visible:outline-offset-[-2px] [&::-webkit-details-marker]:hidden">
             <span className={`min-w-0 flex-1 text-[13px] font-medium ${summary.tone}`}>{summary.text}</span>
             <span aria-hidden className={`flex gap-1 transition-opacity ${validating ? 'opacity-50' : ''}`}>

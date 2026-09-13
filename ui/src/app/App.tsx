@@ -26,7 +26,7 @@ function visibleStart(info: FrameInfo, windowSeconds: number): number {
 
 /** Composition only: state lives in hooks, controls in features, visual primitives in components/ui. */
 export function App() {
-  const [shown, setShown] = useState(16);
+  const [shown, setShown] = useState(8);
   const [windowSeconds, setWindowSeconds] = useState(10);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [validation, setValidation] = useState<Validation | null>(null);

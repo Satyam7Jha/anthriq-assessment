@@ -498,19 +498,22 @@ draws the eye.
 **The hard parts are kept hard, just out of sight:**
 
 - **Zero React re-renders per frame.** Sample data lives in a ref outside the render cycle; one
-  `requestAnimationFrame` loop draws a 2D canvas and redraws only while something moves. A draw is one
-  path per channel: **0.25 ms** for 16 channels at 1440×900. Only low-frequency numbers go through
-  state, at most four times a second.
+  `requestAnimationFrame` loop hands frames to uCharts, one line series per channel, and redraws only
+  when the view has moved by a column or new data has arrived: **0.98 ms** per redraw for 16 channels
+  at 1440×900. The hover readout and lost-sample bands are drawn on a transparent canvas above the
+  chart, so hovering never forces a chart redraw. Only low-frequency numbers go through state, at most
+  four times a second.
 - **Motion at the display's frame rate, not the network's.** Frames arrive about twenty times a
   second; each carries where the window is and how fast it is moving (1× while a recording grows, the
-  playback speed in review, 0 when paused), and the view glides between them, easing out any
-  correction. The server sends two seconds more than the visible window, so the glide never runs past
+  playback speed in review, 0 when paused), and the view keeps moving between them, easing out any
+  correction. uCharts places points on a category axis, so the view advances a pixel column at a time. The server sends two seconds more than the visible window, so the glide never runs past
   the data. A live recording is committed in one-second blocks, so the live view trails the newest data
   by about a block and scrolls continuously instead of in steps.
-- **Envelopes that read as lines.** Each channel is drawn as one band, forward through the column
-  maxima and back through the minima, so consecutive columns join: a steep edge is drawn, a slope stays
-  smooth, and a single-sample spike still reaches its full height. Each row eases toward its fitted
-  range, so the scale settles instead of twitching.
+- **Traces that slide instead of shimmering.** Each pixel column is the min/max of a fixed number of
+  samples on an absolute grid, so as the window moves a column keeps exactly the same samples and the
+  trace translates, instead of every column re-binning slightly on every frame. Each channel zig-zags
+  through its column maxima and minima, so a single-sample spike still reaches its full height, and a
+  row rescales only when its signal leaves the lane or shrinks to under half of it.
 - **Min/max envelope decimation, server-side.** At 4 kHz on a 1,000 px trace each pixel column covers
   40 samples. Subsampling shows a transient only if it lands on a sample point and averaging erases it;
   a min/max envelope means **a single-sample spike still extends its column and can never be hidden**.
@@ -641,7 +644,7 @@ so via a header flag.
 | CRC-32C | 0.99 ms per 518,400 B = **526 MB/s**; check value `0xE3069283` verified |
 | Validation | ~90 M values/s |
 | Seek | ~11 µs, 1 pread, 64 B |
-| Trace draw, 16 channels at 1440×900 (Canvas 2D) | 0.25 ms per display frame |
+| Trace redraw, 16 channels at 1440×900, 1× playback (uCharts) | 0.98 ms |
 
 ### Reproducing the evidence
 
@@ -714,7 +717,7 @@ Full option tables: `node bin/<tool>.ts --help`.
 | **fsync every 10 s**, not per block | Bounds data at risk to ~5 MB rather than putting an APFS stall into the write path 3,600 times an hour. The interval is in the header so a reader knows the window. |
 | **float32** rather than int24 | Departs from real ADC hardware, to keep the validator's comparison exact rather than tolerance-based. Named explicitly rather than chosen silently. |
 | **UI follows committed blocks** | ~1.1 s display latency, in exchange for the viewer being structurally incapable of affecting acquisition. |
-| **Hand-written Canvas 2D** rather than a charting library | About 300 lines of drawing code to own, in exchange for smooth motion: a charting library measured 12.7 ms per update here, which caps motion at the data rate, while the canvas draws in 0.25 ms and glides at the display rate. The bundle also dropped from 680 KB to 256 KB. |
+| **uCharts** for the trace view | A charting library in the front-end bundle only; acquisition stays dependency-free. Measured against a hand-written Canvas renderer on the same recording at 1× playback: 0.98 ms against 0.51 ms per redraw, and whole-column steps instead of sub-pixel motion, in exchange for a maintained chart component. Both are far inside a 16 ms frame. Highcharts, tried first, took 12.7 ms per update. |
 
 ### Bugs found during development
 
