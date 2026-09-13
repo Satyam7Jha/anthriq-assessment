@@ -128,22 +128,12 @@ export function VerifySection({ validation, validating, recordingInProgress, onV
   const head = shown ? headline(validation, checks) : null;
   const summary = checksSummary(checks, !!(shown && report), validating);
 
-  // The checks open by themselves when a verification this page was waiting for finishes, and close
-  // while a recording runs or a check is in progress. A result the server remembers from before the
-  // page loaded stays closed. Between those moments the person decides.
+  // Whenever a finished result is on screen its checks are open, so the detail behind "Passed" is in
+  // view. Before there is a result — recording, checking, not yet verified — the list stays closed. The
+  // person can still close it; a new result opens it again.
   const resultReady = !!(shown && report);
   const [open, setOpen] = useState(false);
-  const [awaiting, setAwaiting] = useState(false);
-  useEffect(() => {
-    if (!validating && !recordingInProgress) return;
-    setAwaiting(true);
-    setOpen(false);
-  }, [validating, recordingInProgress]);
-  useEffect(() => {
-    if (!resultReady || !awaiting) return;
-    setOpen(true);
-    setAwaiting(false);
-  }, [resultReady, awaiting]);
+  useEffect(() => setOpen(resultReady), [resultReady, validation]);
 
   const title = head ? head.title : validating ? 'Checking every sample…' : recordingInProgress ? 'Waiting for Stop' : 'Not verified yet';
   const text = head
