@@ -7,8 +7,9 @@ export function RecordingSection({ meta, info }: { meta: Meta; info: FrameInfo |
   const end = info?.endFrame ?? meta.endFrame;
   return (
     <ListGroup title="Recording">
+      <ListRow label="Status" value={meta.finalised ? 'Saved' : 'Being written'} />
       <ListRow label="Channels" value={meta.channelCount} />
-      <ListRow label="Sample rate" value={`${fmtInt(meta.sampleRateHz)} Hz`} />
+      <ListRow label="Sample rate" value={`${fmtInt(meta.sampleRateHz)} Hz per channel`} />
       <ListRow label="Duration" value={fmtTime(end / meta.sampleRateHz)} />
       <ListRow label="Samples" value={fmtInt(frames * meta.channelCount)} last />
     </ListGroup>
@@ -23,13 +24,18 @@ export function HealthSection({ meta, info }: { meta: Meta; info: FrameInfo | nu
   const lostSeconds = meta.markers.reduce((sum, m) => sum + m.durationSeconds, 0);
   const gaps = meta.markers.length;
   const h = info?.recorder;
+  const footer = gaps
+    ? 'Gaps are stretches where acquisition could not run, for example while the computer slept or the disk stalled. Each is marked in red on the timeline.'
+    : h
+      ? 'The buffer is the recorder’s reserve for a slow disk; samples are dropped only if it fills. Memory stays flat however long you record.'
+      : undefined;
   return (
-    <ListGroup title="Health" footer={gaps > 0 ? 'Gaps are stretches where acquisition could not run — for example while the computer was asleep or the disk stalled. Each one is marked on the timeline.' : undefined}>
-      <ListRow label="Lost" value={gaps ? `${fmtDuration(lostSeconds)} in ${gaps} gap${gaps === 1 ? '' : 's'}` : 'Nothing'} tone={gaps ? 'red' : undefined} last={!h} />
+    <ListGroup title="Health" footer={footer}>
+      <ListRow label="Samples lost" value={gaps ? `${fmtDuration(lostSeconds)} in ${gaps} gap${gaps === 1 ? '' : 's'}` : 'None'} tone={gaps ? 'red' : undefined} last={!h} />
       {h && (
         <>
           <ListRow label="Buffer used" value={`${h.ringFillPct.toFixed(1)}%`} />
-          <ListRow label="Slowest write" value={`${h.writeLatencyMaxMs.toFixed(1)} ms`} />
+          <ListRow label="Slowest disk write" value={`${h.writeLatencyMaxMs.toFixed(1)} ms`} />
           <ListRow label="Recorder memory" value={fmtBytes(h.rssBytes)} last />
         </>
       )}

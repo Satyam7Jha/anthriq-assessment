@@ -64,7 +64,10 @@ export function makeReader({ fd, hdr, extent }: Pick<Recording, 'fd' | 'hdr' | '
     return next && next.startFrameIndex > frameIndex ? { blockIndex: lo, bh: next, method: 'after-gap', probes: probes + 1 } : null;
   }
 
-  /** Stream [fromFrame, toFrame) for a channel subset: one chunk per block per channel. */
+  /**
+   * Stream [fromFrame, toFrame) for a channel subset: one chunk per block per channel. Finish one range
+   * before starting another on the same reader — the run buffers are shared between calls.
+   */
   function* readRange({ fromFrame, toFrame, channels }: { fromFrame: number; toFrame: number; channels: number[] }): Generator<Chunk> {
     for (const c of channels) {
       if (!Number.isInteger(c) || c < 0 || c >= hdr.channelCount) throw new RangeError(`channel ${c} out of range 0..${hdr.channelCount - 1}`);

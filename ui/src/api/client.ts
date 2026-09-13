@@ -21,6 +21,14 @@ export const api = {
   transport: (cmd: TransportCommand) => post<TransportState>('/api/transport', cmd),
   validate: () => post<Validation>('/api/validate'),
 
+  /** Plain links, so the browser handles the download: progress, cancel, and where to save it. */
+  downloads: {
+    recording: '/api/download/recording',
+    metadata: '/api/download/metadata',
+    csv: (q: { fromSeconds: number; seconds: number; channels: number[] }) =>
+      `/api/download/csv?from=${q.fromSeconds.toFixed(3)}&seconds=${q.seconds.toFixed(3)}&channels=${q.channels.join(',')}`,
+  },
+
   /**
    * One decimated window. Binary: [u32 jsonBytes][json padded to 4 bytes][float32 envelopes], read
    * through a zero-copy Float32Array view — nothing to decode byte by byte, so no Worker is needed.

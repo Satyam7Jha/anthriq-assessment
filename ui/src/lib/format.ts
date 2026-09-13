@@ -8,7 +8,8 @@ export function fmtBytes(b: number): string {
     v /= 1024;
     i++;
   }
-  return `${i === 0 ? v : v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+  // A non-breaking space: a number never wraps away from its unit.
+  return `${i === 0 ? v : v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
 
 /** 1:04:12 or 4:12 — the way a media player shows time. */
@@ -17,6 +18,15 @@ export function fmtTime(seconds: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = String(Math.floor(s % 60)).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+/** 0:12.345 — precise enough to find a single sample at 4 kHz within a millisecond. */
+export function fmtPosition(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = (s % 60).toFixed(3).padStart(6, '0');
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 

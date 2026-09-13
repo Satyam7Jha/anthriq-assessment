@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* ---- Design tokens ----------------------------------------------------------------------------
-   One quiet palette for light and dark, following the system setting. The only saturated colours are
-   the accent and the status colours, so lost samples or a failed verification are the one thing on
-   screen that draws the eye.
+   One quiet light palette, used whatever the system setting: traces read best dark on light, and a
+   screenshot looks the same on every machine. The only saturated colours are the accent and the status
+   colours, so lost samples or a failed verification are the one thing on screen that draws the eye.
 
    Contrast: --label (primary text) and --label-2 (secondary text) meet WCAG AA against --surface.
    --label-3 is for decoration that carries no information on its own (tick labels, rule lines). */
@@ -26,29 +26,6 @@
   --gap: rgba(196, 0, 26, 0.09);
   --gap-edge: rgba(196, 0, 26, 0.55);
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --fill: rgba(118, 118, 128, 0.24);
-    --fill-strong: rgba(118, 118, 128, 0.36);
-    --line: rgba(84, 84, 88, 0.55);
-    --label: #f5f5f7;
-    --label-2: #aeaeb2;
-    --label-3: rgba(235, 235, 245, 0.4);
-    --accent: #0a84ff;
-    --green: #30d158;
-    --orange: #ff9f0a;
-    --red: #ff453a;
-    --focus: rgba(10, 132, 255, 0.55);
-    --trace: #d1d1d6;
-    --trace-grid: rgba(235, 235, 245, 0.06);
-    --gap: rgba(255, 69, 58, 0.14);
-    --gap-edge: rgba(255, 69, 58, 0.6);
-    color-scheme: dark;
-  }
 }
 
 @theme inline {

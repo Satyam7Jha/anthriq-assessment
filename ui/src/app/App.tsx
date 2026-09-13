@@ -82,6 +82,7 @@ export function App() {
         recording={recording}
         state={state}
         seconds={duration}
+        limitSeconds={meta.limits.maxRecordingSeconds}
         inspectorOpen={inspectorOpen}
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         onStart={() => void start()}
@@ -104,7 +105,7 @@ export function App() {
           </main>
 
           {inspectorOpen && (
-            <aside aria-label="Inspector" className="w-[320px] shrink-0 overflow-y-auto">
+            <aside aria-label="Inspector" className="w-[340px] shrink-0 overflow-y-auto">
               {session?.error && (
                 <p role="alert" className="mx-5 mt-6 rounded-xl bg-surface px-4 py-3 text-[13px] text-red">
                   {session.error}
@@ -115,6 +116,9 @@ export function App() {
                 info={frames.info}
                 shown={shown}
                 onShown={setShown}
+                channels={channels}
+                windowStart={windowStart}
+                windowSeconds={windowSeconds}
                 validation={validation}
                 validating={validating || state === 'verifying'}
                 verifyAutomatically={state === 'recording' || state === 'stopping'}

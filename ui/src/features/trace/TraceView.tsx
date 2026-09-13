@@ -15,7 +15,7 @@ import { fmtTick } from '../../lib/format';
  * Performance: React never touches pixel data. Envelopes arrive in a ref and a requestAnimationFrame
  * loop pushes them into the chart only when a new frame has arrived; the loop starts once and reads
  * props through refs, so nothing re-renders per frame. The chart is rebuilt only when the channel set
- * or colour scheme changes.
+ * changes.
  */
 
 export const GUTTER = 44; // channel labels
@@ -196,15 +196,9 @@ export function TraceView(props: TraceViewProps) {
     const container = containerRef.current;
     if (!container) return;
 
-    let palette = readPalette(container);
+    const palette = readPalette(container);
     let chart: Highcharts.Chart | null = null;
     let channelKey = '';
-    const scheme = window.matchMedia('(prefers-color-scheme: dark)');
-    const onScheme = () => {
-      palette = readPalette(container);
-      channelKey = ''; // forces a rebuild with the new colours
-    };
-    scheme.addEventListener('change', onScheme);
 
     let mouse: MouseEvent | null = null;
     const onMove = (e: MouseEvent) => (mouse = e);
@@ -264,7 +258,6 @@ export function TraceView(props: TraceViewProps) {
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
-      scheme.removeEventListener('change', onScheme);
       container.removeEventListener('mousemove', onMove);
       container.removeEventListener('mouseleave', onLeave);
       chart?.destroy();

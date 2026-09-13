@@ -11,16 +11,19 @@ export function DetailsSection({ meta, info, frameMs, seekCost }: { meta: Meta; 
         <svg aria-hidden width="8" height="8" viewBox="0 0 8 8" className="transition-transform group-open:rotate-90" fill="currentColor">
           <path d="M2 1l4 3-4 3z" />
         </svg>
-        Details
+        Technical details
       </summary>
       <div className="mt-2 overflow-hidden rounded-xl bg-surface">
         <ListRow label="File" value={meta.file} />
-        <ListRow label="Size" value={fmtBytes(meta.fileSizeBytes)} />
-        <ListRow label="Format" value={`${meta.dtype}, planar blocks`} />
-        <ListRow label="Bytes read per frame" value={info ? `${fmtBytes(info.bytesRead)}${exact ? ' · as predicted' : ''}` : '—'} />
-        <ListRow label="Last seek" value={seekCost ? `${seekCost.microseconds} µs · ${seekCost.method}` : '—'} />
-        <ListRow label="Draw time" value={`${frameMs.toFixed(2)} ms`} last />
+        <ListRow label="Size on disk" value={fmtBytes(meta.fileSizeBytes)} />
+        <ListRow label="Sample format" value={`${meta.dtype}, 1 s planar blocks`} />
+        <ListRow label="Read per screen update" value={info ? `${fmtBytes(info.bytesRead)}${exact ? ', as predicted' : ''}` : '—'} />
+        <ListRow label="Last seek" value={seekCost ? `${seekCost.microseconds} µs, ${fmtBytes(seekCost.bytesRead)} read` : '—'} />
+        <ListRow label="Chart draw time" value={`${frameMs.toFixed(2)} ms`} last />
       </div>
+      <p className="mt-1.5 px-4 text-[12px] leading-snug text-label-2">
+        Only the blocks and channels on screen are read. A seek reads one 64-byte block header, however long the recording.
+      </p>
     </details>
   );
 }

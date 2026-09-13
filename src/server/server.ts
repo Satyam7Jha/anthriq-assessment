@@ -29,7 +29,7 @@ export function startServer(o: ServerOptions): void {
   const transport = createTransport();
   const defaults = { channelCount: o.channelCount, sampleRateHz: o.sampleRateHz };
   const session = createSession({ view, transport, recordingsDir: o.recordingsDir, maxRecordingSeconds: o.maxRecordingSeconds, keepRecordings: o.keepRecordings, ...defaults, log });
-  const handle = createRouter({ view, transport, session, defaults, log });
+  const handle = createRouter({ view, transport, session, defaults, limits: { maxRecordingSeconds: o.maxRecordingSeconds }, log });
   const server = http.createServer((req, res) => void handle(req, res));
 
   let attempt = 0;

@@ -6,7 +6,7 @@ import type { Session } from '../../types';
 export function RecordButton({ state, seconds, onStart, onStop }: { state: Session['state']; seconds: number; onStart: () => void; onStop: () => void }) {
   if (state === 'recording') {
     return (
-      <Button className="rounded-full text-label" onClick={onStop} aria-label={`Stop recording, ${fmtTime(seconds)} recorded`}>
+      <Button className="rounded-full text-label" onClick={onStop} title="Stop and save. The recording is verified straight after." aria-label={`Stop recording, ${fmtTime(seconds)} recorded`}>
         <span className="size-2.5 rounded-[3px] bg-red" />
         Stop
         <span className="num text-label-2">{fmtTime(seconds)}</span>
@@ -22,9 +22,9 @@ export function RecordButton({ state, seconds, onStart, onStop }: { state: Sessi
     );
   }
   return (
-    <Button className="rounded-full text-label" onClick={onStart}>
+    <Button className="rounded-full text-label" onClick={onStart} title="Start a new recording">
       <span className="size-2.5 rounded-full bg-red" />
-      Record
+      {state === 'done' ? 'New recording' : 'Record'}
     </Button>
   );
 }

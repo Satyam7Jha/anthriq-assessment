@@ -9,6 +9,7 @@ import type { Transport, TransportCommand } from './transport.ts';
 import type { Session } from './session.ts';
 import { createFrameRenderer } from './frames.ts';
 import { runValidator } from './processes.ts';
+import { CSV_MAX_SECONDS, DownloadRefused, sendCsv, sendMetadata, sendRecording } from './downloads.ts';
 
 const DIST = path.join(import.meta.dirname, '..', '..', 'ui', 'dist');
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -18,6 +19,8 @@ interface Deps {
   transport: Transport;
   session: Session;
   defaults: { channelCount: number; sampleRateHz: number };
+  /** Told to the browser, so the interface can say what will happen before it happens. */
+  limits: { maxRecordingSeconds: number };
   log: Logger;
 }
 
@@ -39,7 +42,7 @@ const readBody = (req: IncomingMessage): Promise<unknown> =>
     });
   });
 
-export function createRouter({ view, transport, session, defaults, log }: Deps) {
+export function createRouter({ view, transport, session, defaults, limits, log }: Deps) {
   const frames = createFrameRenderer();
 
   function frame(url: URL, res: ServerResponse): void {
@@ -68,10 +71,11 @@ export function createRouter({ view, transport, session, defaults, log }: Deps) 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = `${req.method} ${url.pathname}`;
+    const q = url.searchParams;
     try {
       switch (route) {
         case 'GET /api/meta':
-          return json(res, 200, view.meta(defaults));
+          return json(res, 200, { ...view.meta(defaults), limits: { ...limits, csvMaxSeconds: CSV_MAX_SECONDS } });
         case 'GET /api/session':
           return json(res, 200, session.state);
         case 'POST /api/session/start':
@@ -86,13 +90,24 @@ export function createRouter({ view, transport, session, defaults, log }: Deps) 
           return json(res, 200, transport.apply((await readBody(req)) as TransportCommand, view.open()));
         case 'POST /api/validate':
           return json(res, 200, await runValidator(view.open().filePath));
+        case 'GET /api/download/recording':
+          return sendRecording(view.open().filePath, res);
+        case 'GET /api/download/metadata':
+          return sendMetadata(view.open().filePath, res);
+        case 'GET /api/download/csv':
+          return await sendCsv(view.open().filePath, res, { fromSeconds: Number(q.get('from')), seconds: Number(q.get('seconds')), channels: (q.get('channels') ?? '').split(',').filter(Boolean).map(Number) });
         default:
           return serveStatic(url, res);
       }
     } catch (e) {
+      if (res.headersSent) return void res.destroy(); // failed mid-stream: cut the download rather than corrupt it
       if (e instanceof NoRecordingError) {
         res.writeHead(204);
         return void res.end();
+      }
+      if (e instanceof DownloadRefused) {
+        res.writeHead(409, { 'content-type': 'text/plain; charset=utf-8' });
+        return void res.end(e.message);
       }
       log.error('request-failed', { route, message: (e as Error).message });
       return json(res, 500, { error: (e as Error).message });
