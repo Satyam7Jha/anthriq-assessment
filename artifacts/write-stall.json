@@ -1,0 +1,312 @@
+{
+  "severe": {
+    "validator": {
+      "file": "/tmp/bench-stall-severe.sigb",
+      "result": "FAIL",
+      "exitCode": 1,
+      "expectedValues": 1808640,
+      "recordedValues": 1808640,
+      "missing": 751360,
+      "duplicated": 0,
+      "incorrect": 0,
+      "corrupt": 0,
+      "finalised": true,
+      "recovered": false,
+      "truncatedAtByte": null,
+      "blocksRead": 17,
+      "blockCount": 17,
+      "firstDiscrepancy": {
+        "missing": {
+          "valueIndex": 1029760,
+          "frameIndex": 32180,
+          "frameCount": 1840,
+          "valueCount": 58880,
+          "timeSeconds": 8.045,
+          "blockIndex": 9
+        },
+        "duplicated": null,
+        "incorrect": null,
+        "corrupt": null
+      },
+      "detail": {
+        "missing": [
+          {
+            "valueIndex": 1029760,
+            "frameIndex": 32180,
+            "frameCount": 1840,
+            "valueCount": 58880,
+            "timeSeconds": 8.045,
+            "blockIndex": 9
+          },
+          {
+            "valueIndex": 1216640,
+            "frameIndex": 38020,
+            "frameCount": 2000,
+            "valueCount": 64000,
+            "timeSeconds": 9.505,
+            "blockIndex": 10
+          },
+          {
+            "valueIndex": 1408640,
+            "frameIndex": 44020,
+            "frameCount": 2000,
+            "valueCount": 64000,
+            "timeSeconds": 11.005,
+            "blockIndex": 11
+          },
+          {
+            "valueIndex": 1478400,
+            "frameIndex": 46200,
+            "frameCount": 5820,
+            "valueCount": 186240,
+            "timeSeconds": 11.55,
+            "blockIndex": 12
+          },
+          {
+            "valueIndex": 1792640,
+            "frameIndex": 56020,
+            "frameCount": 2000,
+            "valueCount": 64000,
+            "timeSeconds": 14.005,
+            "blockIndex": 13
+          },
+          {
+            "valueIndex": 1984640,
+            "frameIndex": 62020,
+            "frameCount": 2000,
+            "valueCount": 64000,
+            "timeSeconds": 15.505,
+            "blockIndex": 14
+          },
+          {
+            "valueIndex": 2054400,
+            "frameIndex": 64200,
+            "frameCount": 5820,
+            "valueCount": 186240,
+            "timeSeconds": 16.05,
+            "blockIndex": 15
+          },
+          {
+            "valueIndex": 2368640,
+            "frameIndex": 74020,
+            "frameCount": 2000,
+            "valueCount": 64000,
+            "timeSeconds": 18.505,
+            "blockIndex": 16
+          }
+        ],
+        "duplicated": [],
+        "incorrect": [],
+        "corrupt": []
+      },
+      "recorderLedger": [
+        {
+          "startFrameIndex": 32180,
+          "frameCount": 1840,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 38020,
+          "frameCount": 2000,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 44020,
+          "frameCount": 2000,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 46200,
+          "frameCount": 5820,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 56020,
+          "frameCount": 2000,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 62020,
+          "frameCount": 2000,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 64200,
+          "frameCount": 5820,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 74020,
+          "frameCount": 2000,
+          "causeCode": 2,
+          "cause": "RECORDER_RING_FULL"
+        }
+      ],
+      "declaredDroppedValues": 751360,
+      "trailingLossValues": 0,
+      "ledgerAgreesWithDerivedGaps": true,
+      "crcChecked": true,
+      "elapsedSeconds": 0.03,
+      "throughputValuesPerSecond": 59394362,
+      "peakRssBytes": 57147392
+    },
+    "drops": {
+      "ledgerTruncated": false,
+      "totalDroppedFrames": 23480,
+      "totalDroppedValues": 751360,
+      "entries": [
+        {
+          "startFrameIndex": 32180,
+          "frameCount": 1840,
+          "startValueIndex": 1029760,
+          "valueCount": 58880,
+          "startSeconds": 8.045,
+          "durationSeconds": 0.46,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 38020,
+          "frameCount": 2000,
+          "startValueIndex": 1216640,
+          "valueCount": 64000,
+          "startSeconds": 9.505,
+          "durationSeconds": 0.5,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 44020,
+          "frameCount": 2000,
+          "startValueIndex": 1408640,
+          "valueCount": 64000,
+          "startSeconds": 11.005,
+          "durationSeconds": 0.5,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 46200,
+          "frameCount": 5820,
+          "startValueIndex": 1478400,
+          "valueCount": 186240,
+          "startSeconds": 11.55,
+          "durationSeconds": 1.455,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 56020,
+          "frameCount": 2000,
+          "startValueIndex": 1792640,
+          "valueCount": 64000,
+          "startSeconds": 14.005,
+          "durationSeconds": 0.5,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 62020,
+          "frameCount": 2000,
+          "startValueIndex": 1984640,
+          "valueCount": 64000,
+          "startSeconds": 15.505,
+          "durationSeconds": 0.5,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 64200,
+          "frameCount": 5820,
+          "startValueIndex": 2054400,
+          "valueCount": 186240,
+          "startSeconds": 16.05,
+          "durationSeconds": 1.455,
+          "cause": "RECORDER_RING_FULL"
+        },
+        {
+          "startFrameIndex": 74020,
+          "frameCount": 2000,
+          "startValueIndex": 2368640,
+          "valueCount": 64000,
+          "startSeconds": 18.505,
+          "durationSeconds": 0.5,
+          "cause": "RECORDER_RING_FULL"
+        }
+      ]
+    }
+  },
+  "absorbed": {
+    "validator": {
+      "file": "/tmp/bench-stall-absorbed.sigb",
+      "result": "PASS",
+      "exitCode": 0,
+      "expectedValues": 1536000,
+      "recordedValues": 1536000,
+      "missing": 0,
+      "duplicated": 0,
+      "incorrect": 0,
+      "corrupt": 0,
+      "finalised": true,
+      "recovered": false,
+      "truncatedAtByte": null,
+      "blocksRead": 12,
+      "blockCount": 12,
+      "firstDiscrepancy": {
+        "missing": null,
+        "duplicated": null,
+        "incorrect": null,
+        "corrupt": null
+      },
+      "detail": {
+        "missing": [],
+        "duplicated": [],
+        "incorrect": [],
+        "corrupt": []
+      },
+      "recorderLedger": [],
+      "declaredDroppedValues": 0,
+      "trailingLossValues": 0,
+      "ledgerAgreesWithDerivedGaps": true,
+      "crcChecked": true,
+      "elapsedSeconds": 0.023,
+      "throughputValuesPerSecond": 66858065,
+      "peakRssBytes": 56983552
+    }
+  },
+  "checks": [
+    [
+      "severe: the recorder finalised its file despite the stalled disk",
+      true
+    ],
+    [
+      "severe: loss occurred (the fault really bit)",
+      true
+    ],
+    [
+      "severe: ZERO incorrect values — no frame index was mislabelled (F-01)",
+      true
+    ],
+    [
+      "severe: zero duplicated values",
+      true
+    ],
+    [
+      "severe: the header ledger agrees with the validator's derived gaps",
+      true
+    ],
+    [
+      "severe: verdict is FAIL with exit 1 — loss is never a PASS",
+      true
+    ],
+    [
+      "absorbed: the 64 MiB ring absorbs a 200 ms-per-write disk with zero loss",
+      true
+    ],
+    [
+      "absorbed: PASS, exit 0",
+      true
+    ]
+  ]
+}

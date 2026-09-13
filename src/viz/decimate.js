@@ -30,6 +30,7 @@ function envelope(samples, columns, out) {
   let gMin = Infinity;
   let gMax = -Infinity;
   let sumSq = 0;
+  let counted = 0;
   let flatColumns = 0;
 
   for (let c = 0; c < cols; c++) {
@@ -37,13 +38,24 @@ function envelope(samples, columns, out) {
     // cannot make the last column read past the end of the array.
     const lo = Math.floor((c * n) / cols);
     const hi = Math.max(lo + 1, Math.floor(((c + 1) * n) / cols));
-    let mn = samples[lo];
-    let mx = mn;
+    // NaN marks a sample that does not exist (lost data). Comparisons with NaN are false, so NaN
+    // samples are skipped naturally; a column with no real samples at all is emitted as NaN, which
+    // the renderer draws as nothing — a gap stays a gap instead of a line drawn through it.
+    let mn = Infinity;
+    let mx = -Infinity;
     for (let i = lo; i < hi; i++) {
       const v = samples[i];
       if (v < mn) mn = v;
-      else if (v > mx) mx = v;
-      sumSq += v * v;
+      if (v > mx) mx = v;
+      if (v === v) {
+        sumSq += v * v;
+        counted++;
+      }
+    }
+    if (mn === Infinity) {
+      out[c * 2] = NaN;
+      out[c * 2 + 1] = NaN;
+      continue;
     }
     out[c * 2] = mn;
     out[c * 2 + 1] = mx;
@@ -56,7 +68,7 @@ function envelope(samples, columns, out) {
     samplesPerColumn: n / cols,
     min: gMin,
     max: gMax,
-    rms: Math.sqrt(sumSq / n),
+    rms: counted ? Math.sqrt(sumSq / counted) : 0,
     flatColumns,
   };
 }

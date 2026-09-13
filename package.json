@@ -9,8 +9,7 @@
   "type": "commonjs",
   "bin": {
     "sigctl": "bin/sigctl.js",
-    "sigval": "bin/sigval.js",
-    "sigplay": "bin/sigplay.js"
+    "sigval": "bin/sigval.js"
   },
   "scripts": {
     "test": "node --test-concurrency=1 --test test/*.test.mjs",
@@ -21,7 +20,8 @@
     "ui:build": "node ui/build.mjs",
     "ui:watch": "node ui/build.mjs --watch",
     "typecheck": "tsc --noEmit",
-    "demo": "bash scripts/demo.sh"
+    "demo": "bash scripts/demo.sh",
+    "test:faults": "node bench/write-stall.mjs && node bench/stalled-consumer.mjs --stall 8 --duration 24"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",

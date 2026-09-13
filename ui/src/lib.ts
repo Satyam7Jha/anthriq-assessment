@@ -1,58 +1,39 @@
-import type { Envelopes, WindowPayload } from './types';
+import type { Envelopes, FrameInfo } from './types';
 
-/** Decode the base64 envelopes into Float32Arrays, reusing the caller's buffers where the shape is
- *  unchanged. Reuse matters: at 20 Hz with 32 channels, allocating fresh arrays would create
- *  ~2.5 MB/s of garbage for the browser's GC to chase during rendering. */
-export function decodeEnvelopes(payload: WindowPayload, into: Envelopes): Envelopes {
-  for (const [key, b64] of Object.entries(payload.channels)) {
-    const channel = Number(key);
-    const binary = atob(b64);
-    const floats = binary.length / 4;
-    let target = into.get(channel);
-    if (!target || target.length !== floats) {
-      target = new Float32Array(floats);
-      into.set(channel, target);
-    }
-    const bytes = new Uint8Array(target.buffer);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  }
-  for (const key of into.keys()) if (!(String(key) in payload.channels)) into.delete(key);
-  return into;
+const decoder = new TextDecoder();
+
+/**
+ * Split a binary frame into its JSON header and a zero-copy Float32Array over the envelopes.
+ * Layout: [u32 jsonBytes][json padded to 4 bytes][float32 ...]. No base64, no per-byte loop — the
+ * view costs nothing, which is why this runs on the main thread without a Worker.
+ */
+export function decodeFrame(buf: ArrayBuffer): { info: FrameInfo; envelopes: Envelopes } {
+  const jsonBytes = new DataView(buf).getUint32(0, true);
+  const info = JSON.parse(decoder.decode(new Uint8Array(buf, 4, jsonBytes))) as FrameInfo;
+  const data = new Float32Array(buf, 4 + jsonBytes, info.channels.length * info.columns * 2);
+  return { info, envelopes: { channels: info.channels, columns: info.columns, data } };
 }
 
 export const fmtInt = (n: number): string => Math.round(n).toLocaleString('en-US');
 
 export function fmtBytes(b: number): string {
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let v = b;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) {
     v /= 1024;
     i++;
   }
-  return `${i === 0 ? v : v.toFixed(2)} ${units[i]}`;
+  return `${i === 0 ? v : v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
 
-export function fmtClock(seconds: number): string {
+/** 1:04:12 or 4:12 — the way a media player shows time. */
+export function fmtTime(seconds: number, withFraction = false): string {
   const s = Math.max(0, seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${sec.toFixed(3).padStart(6, '0')}`;
-}
-
-/** Default channel labels. A --montage file can map these onto 10–20 electrode positions; the names
- *  are metadata only and never touch the signal. */
-export const TEN_TWENTY_32 = [
-  'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8', 'FC5',
-  'FC1', 'FC2', 'FC6', 'T7', 'C3', 'Cz', 'C4', 'T8',
-  'CP5', 'CP1', 'CP2', 'CP6', 'P7', 'P3', 'Pz', 'P4',
-  'P8', 'PO9', 'O1', 'Oz', 'O2', 'PO10', 'AF7', 'AF8',
-];
-
-export function channelLabel(index: number, useMontage: boolean, channelCount: number): string {
-  if (useMontage && channelCount <= TEN_TWENTY_32.length) {
-    return TEN_TWENTY_32[index] ?? `ch${String(index).padStart(2, '0')}`;
-  }
-  return `ch${String(index).padStart(2, '0')}`;
+  const sec = Math.floor(s % 60);
+  const frac = withFraction ? `.${String(Math.floor((s % 1) * 10))}` : '';
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return `${h > 0 ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}${frac}`;
 }

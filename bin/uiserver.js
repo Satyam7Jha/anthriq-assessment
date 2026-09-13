@@ -72,66 +72,80 @@ function main() {
     return cached;
   }
 
-  /** Decimate a window to per-channel envelopes. The one function both live and review mode use. */
-  function windowEnvelopes({ fromFrame, toFrame, channels, columns }) {
+  // Buffers reused across requests (F-06). The previous version allocated a fresh Float32Array per
+  // channel per push — ~100 MB/s of garbage at 32 channels and a 10 s window.
+  let scratch = new Float32Array(0);
+  let envOut = new Float32Array(0);
+
+  /**
+   * Decimate a window to min/max envelopes, in ONE reader pass.
+   * Returns { info, body } where body is the binary frame the browser receives:
+   *   [u32 jsonBytes][json, space-padded to a 4-byte boundary][float32 envelopes]
+   * Envelopes are channels.length x columns x 2 floats, in request order, [min, max] per column.
+   * NaN marks a column with no data. Binary, so the browser takes a Float32Array view over the
+   * response — no base64, no per-byte decode loop, nothing for a Worker to do.
+   */
+  function windowFrame({ fromFrame, toFrame, channels, columns, spanFrames = toFrame - fromFrame }) {
     const v = view();
     const { hdr, extent } = v;
     const from = Math.max(0, Math.min(fromFrame, extent.totalFrames));
     const to = Math.max(from, Math.min(toFrame, extent.totalFrames));
     const frames = to - from;
     const cols = Math.max(1, Math.min(columns, 4096));
-    const out = {};
-    const qual = {};
-    if (frames === 0) return { from, to, frames, columns: 0, channels: {}, quality: {}, bytesRead: 0 };
+    const C = channels.length;
 
+    if (scratch.length < frames * C) scratch = new Float32Array(frames * C);
+    if (envOut.length < C * cols * 2) envOut = new Float32Array(C * cols * 2);
+    envOut.fill(NaN, 0, C * cols * 2);
+    const filled = new Int32Array(C);
+    const slotOf = new Map(channels.map((c, k) => [c, k]));
+
+    // Clear to NaN, not zero: this buffer is reused, and a region the reader does not fill is lost
+    // data. Leaving the previous request's values there drew flat lines straight through gaps.
+    if (frames > 0) scratch.fill(NaN, 0, frames * C);
     const bytesBefore = v.reader.stats.bytesRead;
-    // ONE reader pass for all requested channels, not one pass per channel. Per-channel passes would
-    // re-read every block header k times over, which both costs more and makes the measured byte
-    // count disagree with the closed-form prediction the UI displays — and that disagreement is
-    // exactly what the ✓ next to it exists to catch.
-    const scratch = new Map();
-    for (const c of channels) scratch.set(c, { buf: new Float32Array(frames), filled: 0 });
-    for (const chunk of v.reader.readRange({ fromFrame: from, toFrame: to, channels })) {
-      const slot = scratch.get(chunk.channel);
-      if (!slot) continue;
-      const at = chunk.startFrameIndex - from;
-      if (at >= 0 && at + chunk.frameCount <= frames) {
-        slot.buf.set(chunk.data.subarray(0, chunk.frameCount), at);
-        slot.filled = Math.max(slot.filled, at + chunk.frameCount);
+    if (frames > 0) {
+      for (const chunk of v.reader.readRange({ fromFrame: from, toFrame: to, channels })) {
+        const k = slotOf.get(chunk.channel);
+        const at = chunk.startFrameIndex - from;
+        if (k === undefined || at < 0 || at + chunk.frameCount > frames) continue;
+        scratch.set(chunk.data.subarray(0, chunk.frameCount), k * frames + at);
+        filled[k] = Math.max(filled[k], at + chunk.frameCount);
       }
     }
 
-    const env = new Float32Array(cols * 2);
-    for (const c of channels) {
-      const slot = scratch.get(c);
-      if (!slot || slot.filled === 0) continue;
-      const stats = envelope(slot.buf.subarray(0, slot.filled), cols, env);
-      // base64 of the raw float32 envelope: SSE is a text transport, and base64's 33% overhead on
-      // ~8 KB per channel is far cheaper than the JSON number array it replaces (~10x).
-      out[c] = Buffer.from(env.buffer, 0, stats.columns * 2 * 4).toString('base64');
-      qual[c] = { ...quality(stats), columns: stats.columns, samplesPerColumn: stats.samplesPerColumn };
+    const quality = {};
+    for (let k = 0; k < C; k++) {
+      if (filled[k] === 0) continue;
+      const src = scratch.subarray(k * frames, k * frames + filled[k]);
+      // Decimate the filled prefix into the columns it covers, so a partly-filled live window is
+      // drawn at the right place on the time axis rather than stretched across it.
+      // Relative to the REQUESTED span, not the clamped one: while a live recording is shorter than
+      // the window, its data must occupy only the left part of the axis rather than being stretched.
+      const usedCols = Math.max(1, Math.min(cols, Math.round((filled[k] / Math.max(1, spanFrames)) * cols)));
+      const stats = envelope(src, usedCols, envOut.subarray(k * cols * 2, k * cols * 2 + usedCols * 2));
+      quality[channels[k]] = quality_(stats);
     }
 
-    return {
+    const info = {
       from,
       to,
       frames,
       columns: cols,
-      channels: out,
-      quality: qual,
+      channels,
+      quality,
       sampleRateHz: hdr.sampleRateExactHz,
       totalFrames: extent.totalFrames,
       finalised: hdr.finalised,
       bytesRead: v.reader.stats.bytesRead - bytesBefore,
-      // The all-channel equivalent, computed by the SAME closed form the reader's own prediction
-      // uses (PLAN §9.2) so that the ratio the UI displays is exact rather than approximate:
-      //   blocks * blockHeaderBytes + C * frames * bytesPerValue
-      // With that, selecting k of C channels shows exactly C/k, which is the point of displaying it.
-      allChannelBytes: v.reader.predictBytes({ fromFrame: from, toFrame: to, channelCount: hdr.channelCount })
-        .totalBytes,
-      predictedBytes: v.reader.predictBytes({ fromFrame: from, toFrame: to, channelCount: channels.length })
-        .totalBytes,
+      predictedBytes: frames ? v.reader.predictBytes({ fromFrame: from, toFrame: to, channelCount: C }).totalBytes : 0,
+      allChannelBytes: frames ? v.reader.predictBytes({ fromFrame: from, toFrame: to, channelCount: hdr.channelCount }).totalBytes : 0,
     };
+    return { info, envBytes: C * cols * 2 * 4 };
+  }
+
+  function quality_(stats) {
+    return { ...quality(stats), samplesPerColumn: +stats.samplesPerColumn.toFixed(1) };
   }
 
   function meta() {
@@ -199,12 +213,15 @@ function main() {
   }
 
   // ---- transport state (PLAN §9.5 state machine, driven over HTTP) ------------------------------
-  const transport = { state: 'PAUSED', cursorFrame: 0, rateMultiplier: 1, anchorMs: Date.now(), anchorFrame: 0, mode: 'live' };
+  // Paced on the MONOTONIC clock (F-05). Date.now() is a wall clock and steps under NTP; a playback
+  // cursor derived from it would jump. Pause/resume/seek re-anchor, so elapsed paused time is not owed.
+  const nowNs = () => process.hrtime.bigint();
+  const transport = { state: 'PAUSED', cursorFrame: 0, rateMultiplier: 1, anchorNs: nowNs(), anchorFrame: 0, mode: 'live' };
 
   function transportPosition() {
     if (transport.state !== 'PLAYING') return transport.cursorFrame;
     const v = view();
-    const elapsed = (Date.now() - transport.anchorMs) / 1000;
+    const elapsed = Number(nowNs() - transport.anchorNs) / 1e9;
     const f = transport.anchorFrame + Math.floor(elapsed * v.hdr.sampleRateExactHz * transport.rateMultiplier);
     return Math.max(0, Math.min(f, v.extent.totalFrames));
   }
@@ -216,7 +233,7 @@ function main() {
       // after a pause or a seek, the elapsed wall time is NOT owed, so the clock restarts here.
       transport.cursorFrame = frame;
       transport.anchorFrame = frame;
-      transport.anchorMs = Date.now();
+      transport.anchorNs = nowNs();
     };
     switch (cmd.op) {
       case 'play':
@@ -241,8 +258,7 @@ function main() {
         const us = Number(process.hrtime.bigint() - t0) / 1000;
         reanchor(target);
         return {
-          ...transport,
-          position: transport.cursorFrame,
+          ...publicTransport(),
           seekCost: {
             microseconds: +us.toFixed(1),
             bytesRead: v.reader.stats.bytesRead - before.bytes,
@@ -258,12 +274,16 @@ function main() {
       default:
         break;
     }
-    return { ...transport, position: transportPosition() };
+    return publicTransport();
+  }
+
+  function publicTransport() {
+    const { anchorNs, ...rest } = transport; // BigInt does not serialise, and the client needs no anchor
+    return { ...rest, position: transportPosition() };
   }
 
   // ---- HTTP ------------------------------------------------------------------------------------
   const DIST = path.join(__dirname, '..', 'ui', 'dist');
-  const sseClients = new Set();
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
@@ -276,7 +296,10 @@ function main() {
       if (url.pathname === '/api/meta') return send(200, meta());
       if (url.pathname === '/api/health') return send(200, { recorder: health(), statsPath, present: fs.existsSync(statsPath) });
 
-      if (url.pathname === '/api/window') {
+      if (url.pathname === '/api/frame') {
+        // The browser PULLS frames: it asks for the next one when it has drawn the last. A slow
+        // client therefore asks less often instead of accumulating a server-side backlog, which is
+        // the same "no hidden queue" rule the acquisition path follows.
         const q = url.searchParams;
         const v = view();
         const channels = (q.get('channels') ?? '')
@@ -285,15 +308,23 @@ function main() {
           .map(Number)
           .filter((c) => Number.isInteger(c) && c >= 0 && c < v.hdr.channelCount);
         const columns = Number(q.get('columns') ?? 1000);
-        const secondsPerScreen = Number(q.get('seconds') ?? 10);
-        const spanFrames = Math.max(1, Math.round(secondsPerScreen * v.hdr.sampleRateExactHz));
-        let from;
-        if (q.get('follow') === '1') from = Math.max(0, v.extent.totalFrames - spanFrames);
-        else from = Math.max(0, Number(q.get('from') ?? 0));
-        return send(200, {
-          ...windowEnvelopes({ fromFrame: from, toFrame: from + spanFrames, channels, columns }),
-          transport: { ...transport, position: transportPosition() },
-        });
+        const span = Math.max(1, Math.round(Number(q.get('seconds') ?? 10) * v.hdr.sampleRateExactHz));
+        const from =
+          transport.mode === 'live'
+            ? Math.max(0, v.extent.totalFrames - span)
+            : Math.max(0, Math.min(transportPosition() - Math.floor(span / 2), v.extent.totalFrames - span));
+        const { info, envBytes } = windowFrame({ fromFrame: from, toFrame: from + span, channels, columns, spanFrames: span });
+        info.transport = publicTransport();
+        info.recorder = health();
+        let json = Buffer.from(JSON.stringify(info));
+        const pad = (4 - ((4 + json.length) % 4)) % 4;
+        if (pad) json = Buffer.concat([json, Buffer.alloc(pad, 0x20)]);
+        const head = Buffer.allocUnsafe(4);
+        head.writeUInt32LE(json.length, 0);
+        const env = Buffer.from(envOut.buffer, envOut.byteOffset, envBytes);
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'content-length': 4 + json.length + envBytes });
+        res.end(Buffer.concat([head, json, env]));
+        return undefined;
       }
 
       if (url.pathname === '/api/transport' && req.method === 'POST') {
@@ -330,28 +361,6 @@ function main() {
         return undefined;
       }
 
-      if (url.pathname === '/api/stream') {
-        // SSE: one-directional high-rate push is exactly its shape, and it needs zero dependencies.
-        // A WebSocket would mean hand-rolling RFC 6455 framing for no gain (PLAN §2.1).
-        const q = url.searchParams;
-        const client = {
-          res,
-          channels: (q.get('channels') ?? '').split(',').filter(Boolean).map(Number),
-          columns: Number(q.get('columns') ?? 1000),
-          seconds: Number(q.get('seconds') ?? 10),
-        };
-        res.writeHead(200, {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-          connection: 'keep-alive',
-          'x-accel-buffering': 'no',
-        });
-        res.write(': connected\n\n');
-        sseClients.add(client);
-        req.on('close', () => sseClients.delete(client));
-        return undefined;
-      }
-
       // --- static files ---
       let p = url.pathname === '/' ? '/index.html' : url.pathname;
       const filePathOnDisk = path.join(DIST, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
@@ -367,38 +376,6 @@ function main() {
       return send(500, { error: e.message });
     }
   });
-
-  // ---- the push loop ---------------------------------------------------------------------------
-  const pushIntervalMs = Math.round(1000 / D.UI_PUSH_HZ);
-  setInterval(() => {
-    if (sseClients.size === 0) return;
-    let payloadCommon = null;
-    for (const client of sseClients) {
-      try {
-        const v = view();
-        const spanFrames = Math.max(1, Math.round(client.seconds * v.hdr.sampleRateExactHz));
-        const from =
-          transport.mode === 'live'
-            ? Math.max(0, v.extent.totalFrames - spanFrames)
-            : Math.max(0, transportPosition() - Math.floor(spanFrames / 2));
-        const data = windowEnvelopes({
-          fromFrame: from,
-          toFrame: from + spanFrames,
-          channels: client.channels,
-          columns: client.columns,
-        });
-        payloadCommon = {
-          ...data,
-          transport: { ...transport, position: transportPosition() },
-          recorder: health(),
-          serverTime: Date.now(),
-        };
-        client.res.write(`data: ${JSON.stringify(payloadCommon)}\n\n`);
-      } catch (e) {
-        log.throttled('warn', 'push-failed', { message: e.message }, 5000);
-      }
-    }
-  }, pushIntervalMs).unref?.();
 
   server.listen(port, () => {
     const v = view(0);

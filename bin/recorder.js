@@ -21,6 +21,7 @@ const { resolveConfig, describeConfig, ConfigError } = require('../src/config/co
 const { ByteRing } = require('../src/ring/byte-ring');
 const { WireParser } = require('../src/format/wire-parser');
 const { BlockWriter } = require('../src/store/writer');
+const { createIngest } = require('../src/acquire/ingest');
 const { DropLedger, CAUSE } = require('../src/acquire/drop-ledger');
 const fileHeader = require('../src/format/file-header');
 const trailer = require('../src/format/trailer');
@@ -45,6 +46,7 @@ sigacq recorder — PROCESS B
   --stats-out PATH         append stats as NDJSON (the UI health panel tails this)
   --no-dither              record that the source had dither disabled
   --description TEXT       free text into the file header
+  --inject-write-stall-ms N  fault injection: delay every disk write by N ms (slow-disk test)
   --quiet
   --help
 `;
@@ -115,13 +117,15 @@ async function main() {
   // reconstruct it from the file length (PLAN §8.6) — which is what makes a SIGKILLed file readable.
   fs.writeSync(fd, fileHeader.encode(headerFields), 0, D.FILE_HEADER_BYTES, 0);
 
+  let ingest = null; // created below; the writer's callback only runs after it exists
   const writer = new BlockWriter({
     fd,
     cfg,
+    injectStallMs: Number(opts.injectWriteStallMs ?? 0),
     // When a write completes the writer can take another block. Pull from the ring here rather than
     // queueing inside the writer: backlog must live in the ring, where it is bounded and measured.
     onWritten: () => {
-      if (!stopping && !diskError) drainRingToWriter();
+      if (!stopping && !diskError) ingest.drain();
     },
     onError: (err) => {
       log.error('write-failed', { code: err.code, message: err.message });
@@ -130,104 +134,20 @@ async function main() {
     },
   });
 
-  // ---- assembly state ------------------------------------------------------------------------
-  //
-  // The ring holds interleaved frame BYTES contiguously. What bytes alone cannot express is where one
-  // contiguous run of frame indices ends and the next begins — which is exactly what a gap creates.
-  // `segments` carries that, and only that: one descriptor per contiguous run currently resident.
-  //
-  // Why a descriptor list rather than "flush the partial block immediately on a gap": the writer may
-  // be busy, and a block boundary cannot wait for it. Recording the boundary as data keeps the FRAMES
-  // in the ring — the only queue — while still knowing exactly where the boundary falls.
-  //
-  // Bounded, like everything else here: a segment costs three numbers and can only be created by a
-  // gap. The cap exists so a pathologically flapping transport cannot turn this into
-  // time-proportional memory; reaching it is treated as overload and accounted like any other drop.
-  const MAX_SEGMENTS = 4096;
-  const segments = []; // [{ startFrameIndex, frames, gapBefore }]
+  // ---- ingest ---------------------------------------------------------------------------------
+  // Accepted wire blocks -> bounded ring -> file blocks. Lives in src/acquire/ingest.js so the
+  // frame-index bookkeeping can be unit-tested; see that file for why every gap, including one this
+  // recorder creates by dropping, is measured against the last frame actually accepted.
   let diskError = null;
   let stopping = false;
   let connections = 0;
-  let firstFrameIndex = null;
-
-  /** Hand one block (or a short boundary block) from the head segment to the writer. */
-  function emitBlockFromHead(frameCount) {
-    const seg = segments[0];
-    const bytesLen = frameCount * cfg.bytesPerFrame;
-    ring.peekInto(stage, 0, bytesLen);
-    writer.enqueue({
-      interleaved: stage,
-      srcOffset: 0,
-      startFrameIndex: seg.startFrameIndex,
-      frameCount,
-      precedingGapFrames: seg.gapBefore, // only the FIRST block of a segment follows that gap
-      monotonicNanos: process.hrtime.bigint(),
-    });
-    ring.consume(bytesLen);
-    seg.startFrameIndex += frameCount;
-    seg.frames -= frameCount;
-    seg.gapBefore = 0;
-    if (seg.frames === 0) segments.shift();
-  }
-
-  /**
-   * Hand the writer as many blocks as it will currently accept. Frames that do not fit stay in the
-   * ring, which is what keeps the ring the only queue in the system (PLAN §7.3).
-   *
-   * A SHORT block is emitted only at a real boundary — when a later segment already exists, so the
-   * head segment is known to be complete — or at shutdown. Never speculatively: a short block spends
-   * a whole 64-byte header on a fraction of a block's payload.
-   */
-  function drainRingToWriter() {
-    while (writer.canAccept && segments.length > 0) {
-      const seg = segments[0];
-      if (seg.frames >= cfg.framesPerBlock) emitBlockFromHead(cfg.framesPerBlock);
-      else if (segments.length > 1) emitBlockFromHead(seg.frames); // a gap follows: seg is complete
-      else break; // still filling
-    }
-  }
+  ingest = createIngest({ cfg, ring, writer, ledger, stage, log });
 
   const parser = new WireParser({
     maxBlockBytes: Math.max(cfg.wirePayloadBytes * 8, 1 << 20),
-    onBlock: (hdr, buf, payloadOffset, precedingGapFrames) => {
+    onBlock: (hdr, buf, payloadOffset) => {
       if (stopping || diskError) return;
-      if (firstFrameIndex === null) firstFrameIndex = hdr.startFrameIndex;
-
-      const startsNewSegment = segments.length === 0 || precedingGapFrames > 0;
-      if (startsNewSegment && segments.length >= MAX_SEGMENTS) {
-        ledger.record(hdr.startFrameIndex, hdr.frameCount, CAUSE.RECORDER_RING_FULL);
-        log.throttled('warn', 'segment-cap-reached', {
-          segments: segments.length,
-          startFrameIndex: hdr.startFrameIndex,
-        });
-        return;
-      }
-
-      if (!ring.write(buf, payloadOffset, hdr.payloadBytes)) {
-        // FULL. Policy: DROP-NEWEST, accounted with position (PLAN §7.4). Not drop-oldest: that would
-        // require rewriting committed file blocks or emitting frames out of order, breaking the
-        // monotonic-frameIndex invariant the whole format rests on. Not block-the-producer: forbidden
-        // by R11, and there is no mechanism to do it anyway.
-        ledger.record(hdr.startFrameIndex, hdr.frameCount, CAUSE.RECORDER_RING_FULL);
-        log.throttled('warn', 'recorder-ring-full', {
-          startFrameIndex: hdr.startFrameIndex,
-          frameCount: hdr.frameCount,
-          totalDroppedFrames: ledger.totalDroppedFrames,
-          ringFillPct: +(ring.fillFraction * 100).toFixed(1),
-        });
-        return;
-      }
-
-      if (startsNewSegment) {
-        segments.push({
-          startFrameIndex: hdr.startFrameIndex,
-          frames: hdr.frameCount,
-          gapBefore: precedingGapFrames,
-        });
-      } else {
-        segments[segments.length - 1].frames += hdr.frameCount;
-      }
-
+      if (!ingest.onBlock(hdr, buf, payloadOffset)) return;
       const transition = ring.updateLevel();
       if (transition) {
         log.throttled(transition === 'HIGH' ? 'warn' : 'info', `ring-${transition.toLowerCase()}`, {
@@ -236,8 +156,6 @@ async function main() {
           frameIndex: hdr.startFrameIndex,
         });
       }
-
-      drainRingToWriter();
     },
     onGap: (startFrameIndex, frameCount) => {
       ledger.record(startFrameIndex, frameCount, CAUSE.TRANSPORT_GAP);
@@ -339,12 +257,21 @@ async function main() {
     finishing = true;
     stopping = true;
     let step = 'begin';
-    // A shutdown that HANGS never writes the finalised header, which is worse than a forced one.
-    const watchdog = setTimeout(() => {
-      process.stderr.write(`shutdown watchdog fired during step "${step}"\n`);
-      process.exit(1);
-    }, D.SHUTDOWN_WATCHDOG_MS);
-    watchdog.unref();
+    // F-02. A fixed timeout on a variable-latency operation guarantees the failure it exists to
+    // prevent: on a stalled disk it used to fire mid-drain and exit before the ledger reached disk.
+    // Now the order is: drain for a budget scaled to the latency actually observed; if the disk has
+    // not caught up, stop writing payload, account every unwritten frame as a positioned loss, and
+    // write the trailer and finalised header anyway. Losing the last seconds of payload while keeping
+    // an accurate ledger is strictly better than the reverse.
+    let watchdog = null;
+    const armWatchdog = (ms) => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        process.stderr.write(`shutdown watchdog fired during step "${step}"\n`);
+        process.exit(1);
+      }, ms);
+      watchdog.unref();
+    };
 
     try {
       step = 'close-server';
@@ -353,17 +280,23 @@ async function main() {
       if (statsTimer) clearInterval(statsTimer);
 
       step = 'drain-writes';
-      await writer.drain();
-
-      step = 'flush-remaining-segments';
-      // The ring may hold fewer than framesPerBlock frames, possibly spread over several segments.
-      // Write them all out, the last as a SHORT block — legal and self-describing because frameCount
-      // is a per-block field. This is precisely why it is per-block rather than a global constant.
-      while (segments.length > 0 && !diskError) {
-        if (writer.canAccept) emitBlockFromHead(Math.min(cfg.framesPerBlock, segments[0].frames));
-        else await writer.drain();
+      const blocksOutstanding = Math.ceil(ingest.residentFrames / cfg.framesPerBlock) + writer.queuedBlocks + 1;
+      const perBlockMs = Math.max(writer.writeLatencyMaxMs, writer.injectStallMs, 20);
+      const budgetMs = Math.min(D.SHUTDOWN_DRAIN_MAX_MS, Math.max(D.SHUTDOWN_WATCHDOG_MS, blocksOutstanding * perBlockMs * 2));
+      armWatchdog(budgetMs + D.SHUTDOWN_WATCHDOG_MS);
+      const deadline = Date.now() + budgetMs;
+      while (!diskError && (ingest.segmentCount > 0 || writer.queuedBlocks > 0) && Date.now() < deadline) {
+        if (!ingest.flushOne()) await new Promise((r) => setTimeout(r, 2));
       }
-      await writer.drain();
+
+      step = 'account-unflushed';
+      writer.close(); // nothing may be written at filePosition once the trailer goes there
+      const unflushed = [...writer.unacknowledged()];
+      for (const r of unflushed) ledger.record(r.startFrameIndex, r.frameCount, CAUSE.SHUTDOWN_UNFLUSHED);
+      if (ingest.segmentCount > 0) ingest.abandonRemaining(CAUSE.SHUTDOWN_UNFLUSHED);
+      if (unflushed.length || ledger.totalDroppedFrames) {
+        log.warn('shutdown-accounting', { unflushedBlocks: unflushed.length, droppedFrames: ledger.totalDroppedFrames });
+      }
 
       const totalFrames = writer.totalFrames;
       const totalValues = totalFrames * cfg.channelCount;

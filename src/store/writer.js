@@ -18,8 +18,11 @@ const blockHeader = require('../format/block-header');
 const { crc32c } = require('../format/crc32c');
 
 class BlockWriter {
-  constructor({ fd, cfg, onWritten = () => {}, onError = () => {} }) {
+  constructor({ fd, cfg, onWritten = () => {}, onError = () => {}, injectStallMs = 0 }) {
     this.fd = fd;
+    // Fault injection (MEASUREMENT-PLAN F7): hold every write back by this many milliseconds, which
+    // is indistinguishable, from the recorder's point of view, from a slow or saturated disk.
+    this.injectStallMs = injectStallMs;
     this.cfg = cfg;
     this.onWritten = onWritten;
     this.onError = onError;
@@ -65,7 +68,20 @@ class BlockWriter {
   /** True when enqueue() is safe. The caller must check this and leave the frames in the ring
    *  otherwise — that is what keeps the ring the only queue. */
   get canAccept() {
-    return !this.errored && this.pending.length < this.maxPending;
+    return !this.errored && !this.closed && this.pending.length < this.maxPending;
+  }
+
+  /** Stop issuing writes. Shutdown calls this before placing the trailer at filePosition, so a queued
+   *  block can never later be written on top of it. */
+  close() {
+    this.closed = true;
+  }
+
+  /** Frames handed to the writer but not yet acknowledged by the kernel, as positioned ranges. */
+  unacknowledged() {
+    const out = this.pending.map((j) => ({ startFrameIndex: j.startFrameIndex, frameCount: j.frameCount }));
+    if (this.inFlight) out.unshift({ startFrameIndex: this.inFlightStart, frameCount: this.inFlightFrames });
+    return out;
   }
 
   /**
@@ -114,7 +130,7 @@ class BlockWriter {
   }
 
   #kick() {
-    if (this.inFlight || this.pending.length === 0 || this.errored) return;
+    if (this.inFlight || this.pending.length === 0 || this.errored || this.closed) return;
     const job = this.pending.shift();
     this.inFlight = true;
     const t0 = process.hrtime.bigint();
@@ -129,7 +145,13 @@ class BlockWriter {
     // bytes are bounded by (number of gaps + 1) * blockStrideBytes.
     this.filePosition += this.cfg.blockStrideBytes;
 
-    fs.write(this.fd, job.buf, 0, job.bytes, position, (err, written) => {
+    const doWrite = (cb) =>
+      this.injectStallMs > 0
+        ? setTimeout(() => fs.write(this.fd, job.buf, 0, job.bytes, position, cb), this.injectStallMs)
+        : fs.write(this.fd, job.buf, 0, job.bytes, position, cb);
+    this.inFlightFrames = job.frameCount;
+    this.inFlightStart = job.startFrameIndex;
+    doWrite((err, written) => {
       this.inFlight = false;
       if (err) {
         // ENOSPC, EIO. The prefix already written stays valid and readable — every block is

@@ -139,6 +139,15 @@ function openRecording(filePath) {
   try {
     const fileSize = fs.fstatSync(fd).size;
     const hdr = readHeaderSync(fd);
+    // Every reader computes offsets with the planar formula, so a file declaring any other layout
+    // would be read from the wrong channels without an error. Refuse it instead (exit 3).
+    if (hdr.layoutCode !== 1) {
+      throw new fileHeader.UnreadableError(`unsupported layoutCode ${hdr.layoutCode} (${hdr.layoutName}); only BLOCK_PLANAR (1) is readable`);
+    }
+    const expectedStride = hdr.blockHeaderBytes + hdr.framesPerBlock * hdr.channelCount * hdr.bytesPerValue;
+    if (hdr.blockStrideBytes !== expectedStride) {
+      throw new fileHeader.UnreadableError(`blockStrideBytes ${hdr.blockStrideBytes} disagrees with the header's own layout (${expectedStride})`);
+    }
     const extent = resolveExtent(fd, hdr, fileSize);
     return { fd, filePath, fileSize, hdr, extent, close: () => fs.closeSync(fd) };
   } catch (e) {

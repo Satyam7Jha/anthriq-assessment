@@ -27,7 +27,8 @@ module.exports = {
   FSYNC_INTERVAL_SECONDS: 10,
   MAX_LEDGER_ENTRIES: 65_536, // bounded: an uncapped ledger IS time-proportional memory
   STATS_INTERVAL_SECONDS: 10,
-  SHUTDOWN_WATCHDOG_MS: 1500,
+  SHUTDOWN_WATCHDOG_MS: 1500, // floor for the drain budget, and the grace after it
+  SHUTDOWN_DRAIN_MAX_MS: 15_000, // never wait longer than this for a stalled disk
 
   // --- Format (PLAN §8) ---
   FILE_MAGIC: 'SIGBLK01',

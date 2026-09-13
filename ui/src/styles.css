@@ -1,13 +1,65 @@
 @import "tailwindcss";
 
-/* Instrument software is read in dim rooms and stared at for hours. The palette is deliberately
-   low-luminance with a single saturated accent, so a red gap band or an amber watermark warning is
-   the only thing on screen that draws the eye. */
-@theme {
-  --color-trace: oklch(0.78 0.13 195);
-  --color-gap: oklch(0.63 0.21 22);
-  --color-warn: oklch(0.77 0.16 75);
-  --color-ok: oklch(0.75 0.16 155);
+/* One quiet palette, light and dark, driven by the system setting. The only saturated colours are
+   the accent and the two status colours, so a loss band or a failed verification is the one thing on
+   screen that draws the eye. */
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill-strong: rgba(120, 120, 128, 0.2);
+  --line: rgba(60, 60, 67, 0.12);
+  --label: #1d1d1f;
+  --label-2: rgba(60, 60, 67, 0.62);
+  --label-3: rgba(60, 60, 67, 0.36);
+  --accent: #0071e3;
+  --green: #28a745;
+  --orange: #c77700;
+  --red: #d70015;
+  --trace: #3a3a3c;
+  --trace-grid: rgba(60, 60, 67, 0.07);
+  --gap: rgba(215, 0, 21, 0.1);
+  --gap-edge: rgba(215, 0, 21, 0.55);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --fill: rgba(118, 118, 128, 0.24);
+    --fill-strong: rgba(118, 118, 128, 0.36);
+    --line: rgba(84, 84, 88, 0.55);
+    --label: #f5f5f7;
+    --label-2: rgba(235, 235, 245, 0.6);
+    --label-3: rgba(235, 235, 245, 0.3);
+    --accent: #0a84ff;
+    --green: #30d158;
+    --orange: #ff9f0a;
+    --red: #ff453a;
+    --trace: #d1d1d6;
+    --trace-grid: rgba(235, 235, 245, 0.06);
+    --gap: rgba(255, 69, 58, 0.14);
+    --gap-edge: rgba(255, 69, 58, 0.6);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-line: var(--line);
+  --color-label: var(--label);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-accent: var(--accent);
+  --color-green: var(--green);
+  --color-orange: var(--orange);
+  --color-red: var(--red);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
 }
 
 html,
@@ -16,21 +68,59 @@ body,
   height: 100%;
 }
 
-/* Tabular figures everywhere a number changes in place: a counter whose digits shift width is
-   unreadable at 20 Hz. */
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--label);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* Numbers that change in place keep their width. */
 .num {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+}
+
+button {
+  cursor: default;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--pct, 0%), var(--fill-strong) var(--pct, 0%));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+input[type="range"]:disabled::-webkit-slider-thumb {
+  opacity: 0;
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.35 0.02 250);
-  border-radius: 5px;
+  background: var(--fill-strong);
+  border-radius: 4px;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

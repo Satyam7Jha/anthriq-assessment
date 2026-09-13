@@ -30,6 +30,7 @@ All measured on the target machine. Method and raw artifacts in [Measured perfor
 | Channel-subset read, 2 of 32 | **15.97× fewer bytes**, measured == closed-form prediction exactly |
 | Seek cost | **1 pread, 64 bytes, ~11 µs**, O(1) |
 | Independent Python reader written from the spec alone | **identical values to 9 decimals**, 272/272 blocks verified |
+| Slow disk, 1.5 s per write into a 1 MiB ring | loss reported as **751,360 missing, 0 incorrect**, ledger agrees, file finalised |
 
 ---
 
@@ -119,8 +120,8 @@ npm install && npm run ui:build && node bin/uiserver.js --follow /tmp/run.sigb  
         ─── PROCESS BOUNDARY: everything below opens the file O_RDONLY ───┬───
                     ┌───────────────┬────────────────┬───────────────────┴──┐
                     ▼               ▼                ▼                      ▼
-              sigctl (C)      sigval (C)       sigplay (D)          uiserver (E) → React
-           info/read/seek     validator        playback             SSE @ 20 Hz
+              sigctl (C)          sigval (C)                  uiserver (E) → React
+           info/read/seek         validator                   binary frames, pulled
 ```
 
 **Why the boundaries sit here.**
@@ -422,11 +423,15 @@ every `fs.read` is counted and compared against the closed-form prediction:
 channels, 512 KB for all 32 — **independent of file size**. Reading a 41 GiB 24-hour recording uses
 the same 512 KB as reading a 10-second one.
 
-Playback reuses **the same scheduler module** the generator uses, parameterised by
-`effectiveRate = sampleRate × rateMultiplier`. That reuse is the most valuable structural decision in
-the retrieval path: playback pacing is correct for the same reasons acquisition pacing is, and one
-test covers both. Pause, resume and seek re-anchor the clock — the deliberate difference between
-playback, where elapsed paused time is *not* owed, and acquisition, where it is.
+**Playback** (play, pause, resume, seek, 0.25×–8×) is driven from the viewer. The cursor is computed
+from the **monotonic** clock — `anchorFrame + elapsed × rate × multiplier` — and pause, resume and seek
+re-anchor it, which is the deliberate difference between playback, where elapsed paused time is *not*
+owed, and acquisition, where it is. Position is always an exact integer frame index.
+
+This is honestly simpler than acquisition pacing: the viewer only needs the right position twenty
+times a second, not a sample-accurate output stream, so it does not run on the generator's deadline
+scheduler. An earlier version of this README claimed it did; that was not true, and an external review
+caught it.
 
 ---
 
@@ -447,34 +452,33 @@ a stacked column of per-channel traces sharing one time axis, with per-channel g
 seconds-per-screen, and a montage selector. A single overlaid multi-series line chart would be the
 tell that nobody looked at how this data is actually read.
 
-**The hard parts are kept hard:**
+**The interface is deliberately quiet, and ordered for a reviewer.** One trace view, one transport
+bar, one inspector that answers questions in the order they get asked: *is the recording correct?*
+(Verify, at the top), *what is it?* (Recording), *is acquisition healthy?* (Health), *how much am I
+looking at?* (Channels shown: All · 16 · 8 · 4). Technical detail sits behind one disclosure. Rows
+auto-fit their own range, so there is no scale control and a trace can never spill into its neighbour.
+Three keys: Space plays or pauses, ← / → skip ten seconds. It follows the system light/dark setting,
+and the only saturated colours are the accent, green and red — so lost samples or a failed
+verification are the one thing on screen that draws the eye.
 
-- **Zero React re-renders per frame.** Sample data lives in a ref outside the render cycle entirely;
-  the canvas reads it from a `requestAnimationFrame` loop. Pushing 32 channels × 2,000 floats through
-  `setState` at 20 Hz would reconcile the tree 20 times a second and hand React ~2.5 MB/s of garbage,
-  for a picture identical to the one the canvas draws for free. Only low-frequency chrome goes
-  through state, throttled to 4 Hz. **Measured draw cost: 0.90 ms per frame against a 16.7 ms budget.**
+**The hard parts are kept hard, just out of sight:**
+
+- **Zero React re-renders per frame.** Sample data lives in a ref outside the render cycle; the canvas
+  reads it from a `requestAnimationFrame` loop, one `Path2D` per channel. Only low-frequency numbers
+  go through state, at most four times a second.
 - **Min/max envelope decimation, server-side.** At 4 kHz on a 1,000 px trace each pixel column covers
-  40 samples, so rendering every value is information-theoretically pointless. The question is only
-  how to throw data away *correctly*: subsampling shows a transient only if it happens to land on the
-  sample point, and averaging smooths it away, while a min/max envelope means **a single-sample spike
-  still extends its column's extent and can never be hidden**. Decimating in the server rather than
-  the browser is a ~200× reduction in bytes crossing the boundary.
-- **The montage picker changes what leaves the disk.** It does not filter an already-loaded set in
-  the browser — it changes the `channels=` parameter, which changes the set of `pread`s the reader
-  issues. The panel shows measured bytes, the closed-form prediction, and a ✓ that appears only when
-  they are equal. Clicking two checkboxes demonstrates the storage-layout decision paying off, with
-  the arithmetic checked in front of you.
-- **Dropped ranges are drawn, not just counted.** A `Dropped: 38,400` counter is a number; a red band
-  at 35:03 spanning every channel row is an answer to *where*.
-- **The validator runs from the UI** as a separate child process, with its verdict and exit code shown
-  verbatim — separate because the validator's independence is what makes it worth anything.
-- **Per-channel quality indicators, honestly labelled.** On real hardware this column is
-  electrode–skin impedance, measured on the ADS1299's lead-off detection pins, and it is the first
-  thing a technician checks because a high-impedance electrode produces a trace that looks like
-  signal and is not. There is no electrode here, so the panel reads **"synthetic quality metrics — no
-  impedance measured"** and shows the honest analogues: amplitude, flat-channel and rail detection,
-  plus the one indicator that is a *system* fault rather than a sensor fault — a gap.
+  40 samples. Subsampling shows a transient only if it lands on a sample point and averaging erases it;
+  a min/max envelope means **a single-sample spike still extends its column and can never be hidden**.
+- **Binary frames, pulled.** The browser asks for the next frame only after drawing the last one, and
+  receives `[u32 length][JSON][float32 envelopes]`, read through a zero-copy `Float32Array` view — no
+  base64, no per-byte decode, so nothing that needs a Worker. A slow tab simply asks less often; no
+  backlog builds anywhere. (The first version pushed base64-in-JSON over SSE at ~7 MB/s and allocated
+  fresh buffers on every push; the review was right about both.)
+- **Channel selection changes what leaves the disk**, not what the browser draws: the reader issues
+  `pread`s only for the selected channels, and the inspector footnote reports the saving and whether
+  the measured byte count matches the closed-form prediction.
+- **Lost samples are drawn, not just counted** — a soft red band across every row at the exact time.
+- **Verification runs as a separate process**, and the verdict and exit code are shown as returned.
 
 ### It cannot affect acquisition, structurally
 
@@ -547,7 +551,8 @@ so via a header flag.
 ### Reproducing the evidence
 
 ```bash
-npm test                                          # 19 tests: signal, scheduler, transport invariants
+npm test                                          # 25 tests: signal, scheduler, transport, recorder ingest
+node bench/write-stall.mjs                         # slow disk: loss reported as MISSING, 0 incorrect
 node bench/corrupt.mjs /tmp/run.sigb               # validator demonstrated FAILING, 4 classes
 node bench/stalled-consumer.mjs --stall 10         # R11: SIGSTOP the recorder, 7 assertions
 python3 tools/independent_reader.py FILE.sigb --check --channels 3,17 --from 100 --to 102 --dump 3
@@ -618,24 +623,40 @@ Full option tables: `node bin/<tool>.js --help`.
 
 ### Bugs found during development, and how
 
-Three real data-corruption bugs were caught by the fault-injection harness rather than by review, and
-all three were invisible to happy-path testing. They are listed because *how* they were found is part
-of the argument for building that harness first:
+Four real data-integrity bugs were found. The fault-injection harness caught three of them. The fourth,
+and most serious, it missed — because the harness for that fault was specified in
+`MEASUREMENT-PLAN.md` and never built. An external review built it and found the bug.
 
-1. **`net.Socket.write()` does not copy the Buffer it is given.** It retains the reference and writes
-   the bytes later, so handing it a view into a reusable ring meant the socket sent whatever the slot
-   held *at flush time*. Under a 10-second consumer stall this silently corrupted the stream and made
-   the two drop ledgers disagree by ~20,000 frames. Fixed with a send-staging ring whose size
-   provably exceeds the maximum outstanding bytes; the platform behaviour is now pinned by a
-   regression test, so if a future Node ever copies on write, the test says so.
-2. **Mid-file short blocks broke the constant-stride invariant**, silently invalidating every offset
-   formula after them. Blocks are now stride-padded.
-3. **The writer's pending array was an unbounded second queue**, contradicting the "ring is the only
-   queue" property the memory argument depends on. Replaced with one-pending plus a bounded segment
-   descriptor list.
+1. **A recorder-side drop silently mislabelled every later frame index** (found by external review).
+   When the recorder's own ring overflowed, the dropped block had already advanced the wire parser,
+   so the next block reported "no gap" and was appended to the open run. Every block after it carried
+   a frame index short by the number of frames dropped — CRC-clean, self-consistent, and wrong. On a
+   slow disk the validator reported *0 missing, 1,021,440 incorrect*. For an instrument that is worse
+   than losing data: a gap is visible, a time shift is not. My stall test had only ever frozen the
+   recorder process, so every drop happened upstream in the generator and took the path that worked.
+   **Fix:** the ingest state machine now lives in `src/acquire/ingest.js`, measures every gap against
+   the last frame it actually *accepted*, and is unit-tested with frames that carry their own index as
+   their value. `bench/write-stall.mjs` reproduces the review's exact case and now reports
+   **751,360 missing, 0 incorrect**, with the header ledger agreeing with the derived gaps.
+2. **`net.Socket.write()` does not copy the Buffer it is given.** Handing it a view into a reusable ring
+   meant the socket sent whatever the slot held *at flush time*; under a 10-second consumer stall this
+   corrupted the stream. Fixed with a send-staging ring sized to exceed the maximum outstanding bytes;
+   the platform behaviour is pinned by a regression test.
+3. **Mid-file short blocks broke the constant-stride invariant**, invalidating every later offset.
+   Blocks are now stride-padded.
+4. **The writer's pending array was an unbounded second queue**, contradicting "the ring is the only
+   queue". Replaced with one-pending plus a bounded segment list.
 
-Two more were caught by the scheduler's fake-clock tests: emitting on a deliberately early wake, and
-a `setTimeout(0)` spin that libuv clamps to 1 ms.
+The same review found four smaller defects, all fixed: the shutdown watchdog was a fixed 1.5 s and on
+a stalled disk killed the process before the ledger reached disk (shutdown now drains for a budget
+scaled to observed write latency, then ledgers every unwritten frame by position and finalises
+anyway); the validator ignored the drop count the file declares about itself (a recording whose
+header and derived gaps disagree is now a FAIL, and `--json` carries `ledgerAgreesWithDerivedGaps`);
+readers never checked `layoutCode` (unsupported layouts now exit 3); and the viewer's transport ran on
+`Date.now()` (now monotonic).
+
+Two more bugs were caught by the scheduler's fake-clock tests: emitting on a deliberately early wake,
+and a `setTimeout(0)` spin that libuv clamps to 1 ms.
 
 ---
 
@@ -649,9 +670,14 @@ a `setTimeout(0)` spin that libuv clamps to 1 ms.
 - **No DSP layer.** A real review tool has a 0.5–70 Hz band-pass, a 50/60 Hz notch, re-referencing and
   a spectrogram. All are genuinely useful and all are out of scope; the right place for them is a
   transform stage in the reader, not the browser.
-- **Playback is driven from the UI server's cursor**, not from a separate `sigplay` process feeding
-  the browser. The CLI and UI share the state machine, but the audio-style prefetch pipeline
-  described in `PLAN.md` §9.4 is not wired into the browser path.
+- **There is no standalone `sigplay` process.** Playback lives in the viewer and is paced from the
+  monotonic clock at display rate, not emitted as a sample-accurate stream; the prefetch pipeline in
+  `PLAN.md` §9.4 is not built.
+- **The viewer re-decimates its whole window on every frame** rather than caching envelopes per
+  committed block. Buffers are reused, so this costs reads, not garbage — but a per-block cache is the
+  right next step for many simultaneous viewers.
+- **No physical units.** The header has no `vref`, per-channel gain or unit field, so values are
+  dimensionless. The 3,572 reserved header bytes are where they belong.
 - **The one-hour acceptance run and the duration-sweep memory regression** described in
   `MEASUREMENT-PLAN.md` §3 and §6 are specified but not yet executed; the longest run measured here is
   4.5 minutes. The memory argument currently rests on the *structural* claim (everything preallocated
@@ -682,12 +708,12 @@ bin/          generator · recorder · sigctl · sigval · uiserver      (the fi
 src/signal/   the deterministic signal. Pure, no I/O — shared by generator and validator
 src/format/   crc32c · wire · block-header · file-header · trailer   (the third-party contract)
 src/ring/     bounded byte ring (recorder) and block ring (generator)
-src/acquire/  absolute-deadline scheduler (shared with playback) · bounded drop ledger
+src/acquire/  absolute-deadline scheduler · recorder ingest state machine · bounded drop ledger
 src/store/    writer (transpose, one-write-in-flight) · reader (O(1) seek) · recover (truncation)
 src/viz/      min/max envelope decimation. Pure.
 ui/           React 19 + TypeScript + Tailwind 4; committed bundle in ui/dist
-test/         19 tests — signal determinism, scheduler algebra, transport invariants
-bench/        corrupt.mjs (validator proven failing) · stalled-consumer.mjs (R11)
+test/         25 tests — signal determinism, scheduler algebra, transport invariants, recorder ingest
+bench/        corrupt.mjs (validator proven failing) · stalled-consumer.mjs (R11) · write-stall.mjs (slow disk)
 scripts/      demo.sh — starts all three processes, then verifies on clean shutdown
 tools/        independent_reader.py — the format spec, proven
 docs/         FORMAT.md — complete standalone specification

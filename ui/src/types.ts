@@ -1,8 +1,7 @@
-/** Wire types shared with bin/uiserver.js. Kept in one file so a server change that breaks the
- *  contract shows up as a type error rather than as an empty canvas. */
+/** Wire types shared with bin/uiserver.js. */
 
 export interface Marker {
-  kind: 'GAP' | 'RESYNC' | 'OVERFLOW' | 'USER';
+  kind: 'GAP' | 'RESYNC';
   onsetSeconds: number;
   durationSeconds: number;
   startFrameIndex: number;
@@ -12,30 +11,19 @@ export interface Marker {
 
 export interface Meta {
   file: string;
-  path: string;
   fileSizeBytes: number;
   channelCount: number;
   sampleRateHz: number;
-  framesPerBlock: number;
-  blockStrideBytes: number;
   dtype: string;
-  bytesPerValue: number;
   layout: string;
   totalFrames: number;
   totalValues: number;
   durationSeconds: number;
   finalised: boolean;
-  recovered: boolean;
   hadDrops: boolean;
   signalId: string;
-  ditherDisabled: boolean;
-  startTimestampUnixNanos: string;
-  recordingId: string;
-  producer: string;
-  ringBytes: number;
   ringSeconds: number;
   markers: Marker[];
-  droppedFrames: number;
   droppedValues: number;
 }
 
@@ -44,67 +32,73 @@ export interface ChannelQuality {
   peakToPeak: number;
   flat: boolean;
   railed: boolean;
-  columns: number;
-  samplesPerColumn: number;
 }
 
 export interface RecorderHealth {
-  elapsedSeconds: number;
-  framesReceived: number;
   valuesReceived: number;
-  blocksWritten: number;
   bytesWritten: number;
   ringFillPct: number;
   ringPeakPct: number;
   ringHeadroomSeconds: number;
   ringLevel: 'NORMAL' | 'ELEVATED' | 'HIGH';
-  queuedBlocks: number;
   writeLatencyMaxMs: number;
-  fsyncCount: number;
-  fsyncMaxMs: number;
-  gaps: number;
-  gapFrames: number;
-  duplicateFrames: number;
-  crcFailures: number;
-  corruptBytes: number;
   droppedFrames: number;
   droppedRanges: number;
+  crcFailures: number;
   rssBytes: number;
+}
+
+export interface SeekCost {
+  microseconds: number;
+  bytesRead: number;
+  method: string;
+  probes: number;
 }
 
 export interface TransportState {
   state: 'PLAYING' | 'PAUSED';
-  cursorFrame: number;
   rateMultiplier: number;
   mode: 'live' | 'review';
   position: number;
-  seekCost?: {
-    microseconds: number;
-    bytesRead: number;
-    readCalls: number;
-    method: string;
-    probes: number;
-  };
+  seekCost?: SeekCost;
 }
 
-/** One decimated window. `channels` maps channel index -> base64 of a Float32Array laid out as
- *  [min0, max0, min1, max1, …] — the min/max envelope, one pair per pixel column. */
-export interface WindowPayload {
+/** The JSON half of a binary frame from GET /api/frame. */
+export interface FrameInfo {
   from: number;
   to: number;
   frames: number;
   columns: number;
-  channels: Record<string, string>;
+  channels: number[];
   quality: Record<string, ChannelQuality>;
   sampleRateHz: number;
   totalFrames: number;
   finalised: boolean;
   bytesRead: number;
-  allChannelBytes: number;
   predictedBytes: number;
+  allChannelBytes: number;
   transport: TransportState;
-  recorder?: RecorderHealth | null;
-  serverTime?: number;
+  recorder: RecorderHealth | null;
 }
 
-export type Envelopes = Map<number, Float32Array>;
+/** The pixel half: channels.length x columns x [min, max], NaN where there is no data. */
+export interface Envelopes {
+  channels: number[];
+  columns: number;
+  data: Float32Array;
+}
+
+export interface Validation {
+  exitCode: number;
+  report: {
+    result: string;
+    expectedValues: number;
+    recordedValues: number;
+    missing: number;
+    duplicated: number;
+    incorrect: number;
+    ledgerAgreesWithDerivedGaps: boolean | null;
+    elapsedSeconds: number;
+  } | null;
+  stderr: string;
+}

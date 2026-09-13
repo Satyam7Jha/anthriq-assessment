@@ -222,7 +222,36 @@ function main() {
     const expectedValues = hdr.finalised && !extent.recovered ? hdr.totalValues : extent.totalValues;
     const ledger = readLedger(fd, hdr, fileSize);
 
-    const failed = missing > 0 || duplicated > 0 || incorrect > 0 || corruptValues > 0;
+    // F-04: the verdict must also answer to what the file DECLARES about itself.
+    //
+    // Loss the recorder ledgered at or beyond the last recorded frame leaves no gap in the block
+    // sequence, so derivation alone cannot see it. It is still known, positioned loss, so it counts
+    // as missing. Then the two independent accounts are compared: frames the header declares dropped,
+    // and frames this validator derived as missing. A recording that contradicts itself is never a
+    // PASS, whichever of the two is wrong.
+    let trailingLossValues = 0;
+    if (hdr.finalised && !extent.recovered) {
+      for (const e of ledger.entries) {
+        if (e.startFrameIndex >= expectedNext) {
+          trailingLossValues += e.frameCount * C;
+          note('missing', {
+            valueIndex: e.startFrameIndex * C,
+            frameIndex: e.startFrameIndex,
+            frameCount: e.frameCount,
+            valueCount: e.frameCount * C,
+            timeSeconds: e.startFrameIndex / hdr.sampleRateExactHz,
+            blockIndex: extent.blockCount,
+            cause: e.cause,
+          });
+        }
+      }
+      missing += trailingLossValues;
+    }
+    const declaredDroppedValues = hdr.finalised && !extent.recovered ? hdr.droppedFramesTotal * C : null;
+    const ledgerAgreesWithDerivedGaps = declaredDroppedValues === null ? null : declaredDroppedValues === missing;
+
+    const failed =
+      missing > 0 || duplicated > 0 || incorrect > 0 || corruptValues > 0 || ledgerAgreesWithDerivedGaps === false;
     const truncated = !hdr.finalised || extent.recovered || truncatedAtByte !== null;
     const result = failed ? 'FAIL' : truncated ? 'PASS (TRUNCATED)' : 'PASS';
     const code = failed ? EXIT.FAIL : truncated ? EXIT.TRUNCATED : EXIT.PASS;
@@ -248,6 +277,9 @@ function main() {
             firstDiscrepancy: first,
             detail,
             recorderLedger: ledger.entries,
+            declaredDroppedValues,
+            trailingLossValues,
+            ledgerAgreesWithDerivedGaps,
             crcChecked: checkCrc,
             elapsedSeconds: +elapsedSeconds.toFixed(3),
             throughputValuesPerSecond: Math.round(recordedValues / elapsedSeconds),
@@ -302,13 +334,11 @@ function main() {
       }
       // The independent cross-check: the recorder's OWN ledger versus the gaps this validator
       // derived from block headers alone. Two independent derivations of the same fact.
-      if (ledger.entries.length || missing > 0) {
-        const ledgerFrames = ledger.entries.reduce((a, e) => a + e.frameCount, 0);
-        const agree = ledgerFrames * C === missing;
+      if (ledgerAgreesWithDerivedGaps !== null && (declaredDroppedValues > 0 || missing > 0)) {
         lines.push(
-          `Drop ledger:      ${ledger.entries.length} entr${ledger.entries.length === 1 ? 'y' : 'ies'}, ` +
-            `${n(ledgerFrames * C)} values (source: ${ledger.source}) — ` +
-            `${agree ? 'AGREES with independently derived gaps' : 'DISAGREES with derived gaps'}`
+          `Drop ledger:      header declares ${n(declaredDroppedValues)} dropped values, ` +
+            `validator derived ${n(missing)} missing — ` +
+            `${ledgerAgreesWithDerivedGaps ? 'AGREE' : 'DISAGREE: the recording contradicts itself'}`
         );
       }
       lines.push('');

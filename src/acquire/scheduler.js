@@ -16,9 +16,10 @@
 // pessimistic +0.5 ms/tick over 200 ticks/s that is +100 ms of drift per second: six minutes per
 // hour, a ~10% sample shortfall. Not a subtle effect — a total failure of the primary requirement.
 //
-// This module is SHARED by the generator (PLAN §6) and by playback (PLAN §9.4), parameterised by
-// effectiveRate. That reuse is deliberate: playback pacing is then correct for the same reasons
-// acquisition pacing is, and one test covers both.
+// Used by the generator. It is parameterised by rate rather than hard-wired to acquisition, and
+// reanchor() exists for pause/resume/seek, but the viewer's review cursor does not run on it: the
+// viewer only needs the right position twenty times a second, which it derives from the monotonic
+// clock directly (bin/uiserver.js).
 
 const D = require('../config/defaults');
 

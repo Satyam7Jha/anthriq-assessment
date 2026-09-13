@@ -78,6 +78,14 @@ function makeReader(fd, hdr, extent) {
       else if (frameIndex >= m.startFrameIndex + m.frameCount) lo = mid + 1;
       else return { blockIndex: mid, bh: m, method: 'binary-search', probes };
     }
+    // The frame falls inside a gap: no block contains it. Return the first block AFTER the gap, so a
+    // range that starts in lost data still reads everything that does exist in it. Returning null
+    // here made a review window opened inside a gap render nothing at all.
+    if (lo < extent.blockCount) {
+      const next = blockHeaderAt(lo);
+      probes++;
+      if (next && next.startFrameIndex > frameIndex) return { blockIndex: lo, bh: next, method: 'after-gap', probes };
+    }
     return null;
   }
 

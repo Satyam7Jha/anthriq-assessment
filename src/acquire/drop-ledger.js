@@ -19,6 +19,8 @@ const CAUSE = {
   TRANSPORT_GAP: 4,
   CORRUPT_FRAMES: 5,
   GENERATOR_DISCONNECT: 6,
+  // Frames still in the ring when shutdown had to finalise metadata before the disk drained them.
+  SHUTDOWN_UNFLUSHED: 7,
 };
 const CAUSE_NAME = Object.fromEntries(Object.entries(CAUSE).map(([k, v]) => [v, k]));
 
