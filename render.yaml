@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: sigacq
+    name: the-odyssey
     runtime: docker
     plan: free
     healthCheckPath: /api/meta
