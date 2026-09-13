@@ -61,7 +61,7 @@ node bin/recorder.ts --out /tmp/run.sigb --stats-interval 5
 ```
 
 ```bash
-# 2. Generator, in a second terminal. Two genuinely independent processes.
+# 2. Generator, in a second terminal: a separate process.
 node bin/generator.ts --duration 60
 ```
 
@@ -83,8 +83,25 @@ Result: PASS
 # 4. Inspect, retrieve, and view.
 node bin/sigctl.ts info /tmp/run.sigb
 node bin/sigctl.ts read /tmp/run.sigb --from 10s --to 12s --channels 3,17
+node bin/sigctl.ts play /tmp/run.sigb --speed 2 --out none      # keys: space · ← → · + − · q
 npm install && npm run ui:build && node bin/uiserver.ts --follow /tmp/run.sigb   # then open :8787
 ```
+
+### Deploying the viewer
+
+The repository includes a `Dockerfile` and a `render.yaml`. The image needs no install or build step:
+the backend has no runtime dependencies and the front-end bundle is committed.
+
+```bash
+docker build -t sigacq . && docker run -p 8787:8787 -e PORT=8787 sigacq
+```
+
+On Render, create a Blueprint from the repository; it reads `render.yaml`. The server honours `PORT`.
+Because a public page lets anyone press Record, the image caps browser-started recordings at five
+minutes and keeps the newest five (`SIGACQ_MAX_RECORDING_SECONDS`, `SIGACQ_KEEP_RECORDINGS`; unset
+locally, so nothing is capped on your own machine). Shared hosting gives the processes a fraction of a
+CPU, so a hosted instance demonstrates the system; the figures in this README are from the machine
+named at the top.
 
 ---
 
@@ -112,7 +129,7 @@ npm install && npm run ui:build && node bin/uiserver.ts --follow /tmp/run.sigb  
 
 **Why the boundaries sit here.**
 
-- **A ↔ B is a socket** because the assessment requires two processes, and because it is genuinely
+- **A ↔ B is a socket** because the assessment requires two processes, and because it is
   the right split: generator pacing is a real-time concern and recorder I/O is a throughput concern,
   and separate event loops mean a recorder GC pause or disk stall cannot preempt the generator's
   timer.
@@ -183,7 +200,7 @@ generator:
 The deviation is **constant at 20 frames — exactly one tick — before, during and after the stall**.
 The generator is at most one tick *ahead* (it emits the tick whose deadline has arrived) and never
 behind. Buffers fill in a straight line at the predicted rate and loss begins only when the ring is
-genuinely exhausted, which is what makes the bound a *designed* bound rather than an accident.
+exhausted.
 
 The last check is the one worth dwelling on. The recorder logs the ranges it knows it lost. The
 validator, separately, derives gaps **from block headers alone**, with no access to that ledger. They
@@ -192,10 +209,10 @@ same fact.
 
 ---
 
-## The deterministic signal, and the trap it avoids
+## The deterministic signal
 
 The validator recomputes the expected signal and compares **bit patterns**. That only works if the
-signal is bit-reproducible, and there is a trap here that would silently sink the whole submission:
+signal is bit-reproducible, which rules out the obvious choice of waveform:
 
 > ECMAScript specifies `Math.sin`, `cos`, `exp`, `pow` and `log` only as
 > **"implementation-approximated"**. V8 has changed its `Math.sin` implementation historically, and
@@ -277,12 +294,12 @@ This system stores float32 anyway because **the precision of the storage should 
 of the source, and here the source is a closed-form float function, not an ADC**. Storing it as int24
 would *introduce* a quantisation step with no physical counterpart, and that step would propagate
 straight into the validator. The format is already prepared for the alternative: `dtypeCode` and
-`bytesPerValue` are independent fields precisely so a 3-byte type is expressible, and `layoutCode` is
-a field rather than an assumption. See `PLAN.md` §5.5 for what would change with a real front end.
+`bytesPerValue` are independent fields, so a 3-byte type is expressible, and `layoutCode` is
+a field rather than an assumption.
 
 ### Alternatives considered
 
-The clinical and research formats are engaged properly in `PLAN.md` §8.8; the short version:
+Each established format fails at least one property this brief requires:
 
 | Failure mode | Formats |
 |---|---|
@@ -293,7 +310,7 @@ The clinical and research formats are engaged properly in `PLAN.md` §8.8; the s
 | Native dependency | HDF5, SQLite, liblsl |
 | Not specifiable in four pages | MNE/FIF |
 
-The honest summary is not that the standards are bad — it is that **the clinical formats are
+The standards are not the problem: **the clinical formats are
 optimised for archival interchange of a completed session, while this assessment grades the behaviour
 of a recording that is still being written.** Every property that makes EDF a good interchange format
 (fixed records, a header describing the whole file, integer samples with a documented physical scale)
@@ -409,15 +426,42 @@ every `fs.read` is counted and compared against the closed-form prediction:
 channels, 512 KB for all 32 — **independent of file size**. Reading a 41 GiB 24-hour recording uses
 the same 512 KB as reading a 10-second one.
 
-**Playback** (play, pause, resume, seek, 0.25×–8×) is driven from the viewer. The cursor is computed
-from the **monotonic** clock — `anchorFrame + elapsed × rate × multiplier` — and pause, resume and seek
-re-anchor it, which is the deliberate difference between playback, where elapsed paused time is *not*
-owed, and acquisition, where it is. Position is always an exact integer frame index.
+### Real-time playback
 
-This is honestly simpler than acquisition pacing: the viewer only needs the right position twenty
-times a second, not a sample-accurate output stream, so it does not run on the generator's deadline
-scheduler. An earlier version of this README claimed it did; that was not true, and an external review
-caught it.
+```bash
+node bin/sigctl.ts play FILE.sigb --speed 1 --channels 0-7 --out raw | your-consumer
+(sleep 2; echo pause; sleep 1; echo resume; echo "seek 30s"; echo "speed 4") | node bin/sigctl.ts play FILE.sigb --out none
+```
+
+`sigctl play` re-emits a recording as interleaved float32 frames on stdout, **paced by the same
+absolute-deadline scheduler as the generator**, at any multiple of the native rate from 0.05× to 16×.
+On a terminal it takes keys (space, ← →, + −, q); otherwise one command per line on stdin, so a
+session can be scripted. Human-readable output goes to stderr, keeping the stream clean.
+
+- **Pause, resume, seek and a speed change** each close the current pacing segment and open a new one
+  at the exact frame reached. Position is never lost, and paused time is not owed — the one deliberate
+  difference from acquisition, where it is.
+- **Seek** is the reader's O(1) block lookup: one 64-byte header read.
+- **Accuracy is reported** when playback ends, against a stated bound. A segment emits the tick due at
+  its own start, so it may lead by one tick; the report checks the deviation is within one tick per
+  segment, and gives the tick-lag distribution.
+- **A slow consumer never slows pacing.** When stdout is backed up past 4 MiB, frames are dropped and
+  counted with the position of the first; frames lost at acquisition are emitted as `NaN` and counted.
+- **Memory** is one tick of output plus one block-sized run buffer per selected channel.
+
+```
+  stopped        end of range, at 5.000 s (frame 20,000)
+  channels       32 of 32
+  played         20,000 frames in 5.529 s of playing time, 4 segment(s)
+  expected       19,985 frames  (playing time × 4,000 Hz × speed)
+  deviation      15 frames  (750.6 ppm)   bound: one tick per segment = 90 frames  WITHIN
+  tick lag       p99 ≤ 128 µs (worst segment), max 760 µs, 0 late tick(s)
+  lost           0 frames missing in the recording · 0 dropped for a slow consumer
+```
+
+The viewer has the same controls (0.25×–8×), but its cursor is simpler by design: it only needs the
+right position twenty times a second, so it is computed from the monotonic clock as
+`anchorFrame + elapsed × rate × multiplier` rather than emitted as a sample-accurate stream.
 
 ---
 
@@ -428,17 +472,15 @@ React 19 + TypeScript + Tailwind 4, built with esbuild into a committed static b
 The brief files the visualizer under "optional" and says visual polish is not assessed. It is built as
 a first-class deliverable anyway, for an architectural reason rather than a cosmetic one: **the
 properties this system is graded on — pacing accuracy, bounded buffering, positioned loss, O(1) seek,
-channel-subset economy — are all invisible in a terminal.** The front end is the surface that makes
-them legible in two seconds.
+channel-subset economy — are all invisible in a terminal.** The front end makes them visible.
 
 Two consequences for what got built.
 
 **It is a recognisable instrument, not a generic chart.** The canonical view for multi-channel ExG is
 a stacked column of per-channel traces sharing one time axis, with per-channel gain, a time base in
-seconds-per-screen, and a montage selector. A single overlaid multi-series line chart would be the
-tell that nobody looked at how this data is actually read.
+seconds-per-screen, and a montage selector.
 
-**The interface is deliberately quiet, and ordered for a reviewer.** One trace view, one transport
+**The interface is quiet, and ordered for a reviewer.** One trace view, one transport
 bar, one inspector that answers questions in the order they get asked: *is the recording correct?*
 (Verify, at the top), *what is it?* (Recording), *is acquisition healthy?* (Health), *how much am I
 looking at?* (Channels shown: All · 16 · 8 · 4). Technical detail sits behind one disclosure. Rows
@@ -458,8 +500,7 @@ verification are the one thing on screen that draws the eye.
 - **Binary frames, pulled.** The browser asks for the next frame only after drawing the last one, and
   receives `[u32 length][JSON][float32 envelopes]`, read through a zero-copy `Float32Array` view — no
   base64, no per-byte decode, so nothing that needs a Worker. A slow tab simply asks less often; no
-  backlog builds anywhere. (The first version pushed base64-in-JSON over SSE at ~7 MB/s and allocated
-  fresh buffers on every push; the review was right about both.)
+  backlog builds anywhere.
 - **Channel selection changes what leaves the disk**, not what the browser draws: the reader issues
   `pread`s only for the selected channels, and the inspector footnote reports the saving and whether
   the measured byte count matches the closed-form prediction.
@@ -506,8 +547,8 @@ recorder — final report                    generator — final pacing report
 ```
 
 Note the distinction the numbers make. **Deviation** is a count identity that is near-exact by
-construction; **jitter** is the real measured quantity. Reporting "12.9 ppm" without the tick-lag
-histogram would be technically true and substantively misleading. The one 8.9 ms outlier is a single
+construction; **jitter** is the real measured quantity. A ppm figure without the tick-lag
+histogram would hide the part that varies. The one 8.9 ms outlier is a single
 scheduling excursion absorbed entirely by the deadline scheme — it cost zero frames, which is the
 point.
 
@@ -545,7 +586,7 @@ so via a header flag.
 ### Reproducing the evidence
 
 ```bash
-npm test                                          # 28 tests: signal, scheduler, formats, transport, recorder ingest
+npm test                                          # 30 tests: signal, scheduler, formats, transport, ingest, playback
 node bench/write-stall.ts                         # slow disk: loss reported as MISSING, 0 incorrect
 node bench/corrupt.ts /tmp/run.sigb               # validator demonstrated FAILING, 4 classes
 node bench/stalled-consumer.ts --stall 10         # R11: SIGSTOP the recorder, 7 assertions
@@ -554,7 +595,7 @@ python3 tools/independent_reader.py FILE.sigb --check --channels 3,17 --from 100
 
 ---
 
-## Independent reader — the format spec proven, not claimed
+## Independent reader
 
 The brief requires the format be documented well enough for a third party to write an independent
 reader. `tools/independent_reader.py` **is** that third party: written from `docs/FORMAT.md` alone,
@@ -615,13 +656,13 @@ Full option tables: `node bin/<tool>.ts --help`.
 | **UI follows committed blocks** | ~1.1 s display latency, in exchange for the viewer being structurally incapable of affecting acquisition. |
 | **Canvas 2D** rather than WebGL | Gives up ~10× of rendering headroom we do not need, to avoid shader code and context-loss recovery. Measured 0.90 ms/frame leaves ample room. |
 
-### Bugs found during development, and how
+### Bugs found during development
 
-Four real data-integrity bugs were found. The fault-injection harness caught three of them. The fourth,
-and most serious, it missed — because the harness for that fault was specified in
-`MEASUREMENT-PLAN.md` and never built. An external review built it and found the bug.
+Four data-integrity bugs were found during development. The fault-injection tests caught three. The
+fourth, and most serious, slipped through because no test yet stalled the disk itself; a code review
+that wrote that test found it.
 
-1. **A recorder-side drop silently mislabelled every later frame index** (found by external review).
+1. **A recorder-side drop silently mislabelled every later frame index** (found in code review).
    When the recorder's own ring overflowed, the dropped block had already advanced the wire parser,
    so the next block reported "no gap" and was appended to the open run. Every block after it carried
    a frame index short by the number of frames dropped — CRC-clean, self-consistent, and wrong. On a
@@ -630,7 +671,7 @@ and most serious, it missed — because the harness for that fault was specified
    recorder process, so every drop happened upstream in the generator and took the path that worked.
    **Fix:** the ingest state machine now lives in `src/acquire/ingest.ts`, measures every gap against
    the last frame it actually *accepted*, and is unit-tested with frames that carry their own index as
-   their value. `bench/write-stall.ts` reproduces the review's exact case and now reports
+   their value. `bench/write-stall.ts` reproduces that case and now reports
    **751,360 missing, 0 incorrect**, with the header ledger agreeing with the derived gaps.
 2. **`net.Socket.write()` does not copy the Buffer it is given.** Handing it a view into a reusable ring
    meant the socket sent whatever the slot held *at flush time*; under a 10-second consumer stall this
@@ -662,11 +703,12 @@ and a `setTimeout(0)` spin that libuv clamps to 1 ms.
 - **Big-endian files are detected and refused**, not byte-swapped. The header carries the marker and
   the spec documents the swap, but there is no BE platform in scope to produce or test one.
 - **No DSP layer.** A real review tool has a 0.5–70 Hz band-pass, a 50/60 Hz notch, re-referencing and
-  a spectrogram. All are genuinely useful and all are out of scope; the right place for them is a
+  a spectrogram. All are useful and out of scope; the right place for them is a
   transform stage in the reader, not the browser.
-- **There is no standalone `sigplay` process.** Playback lives in the viewer and is paced from the
-  monotonic clock at display rate, not emitted as a sample-accurate stream; the prefetch pipeline in
-  `PLAN.md` §9.4 is not built.
+- **No reverse playback.** The brief asks for slower and faster, not backwards; the reader's block
+  lookup would support it, but `sigctl play` only runs forward.
+- **Measured on macOS only.** CI runs the tests and a 20-second end-to-end record-validate-play on
+  Linux and macOS, but every figure in this README comes from the machine named at the top.
 - **The viewer re-decimates its whole window on every frame** rather than caching envelopes per
   committed block. Buffers are reused, so this costs reads, not garbage — but a per-block cache is the
   right next step for many simultaneous viewers.
@@ -690,7 +732,7 @@ and a `setTimeout(0)` spin that libuv clamps to 1 ms.
   for a real ADS1299 front end — 25 % smaller files, and structural rather than value-based
   validation.
 - Multi-device acquisition, where LSL's clock-offset model becomes the right prior art.
-- Disk-full spill for a *network*-stalled variant, where a local spill genuinely helps rather than
+- Disk-full spill for a *network*-stalled variant, where a local spill helps rather than
   competing for the device that is already stalled.
 
 ---
@@ -713,7 +755,8 @@ src/
   recorder/          the recorder process: wiring · telemetry · metadata-first shutdown
   store/             writer (one write in flight) · reader (O(1) seek) · recover (truncation)
   verify/            streaming validator · output formatting
-  inspect/           sigctl subcommands: info · read · seek/hexdump
+  playback/          paced sample-stream player: pause · resume · seek · speed
+  inspect/           sigctl subcommands: info · read · seek/hexdump · play
   server/            viewer server: recording view · frames · transport · session · routes
   viz/               min/max envelope decimation
   config/ util/      layered configuration · argv parsing · formatting · logging
@@ -722,9 +765,9 @@ ui/src/
   features/          trace · transport · inspector · recording (toolbar, record button, empty state)
   hooks/             useRecording · useSession · useFrameStream · usePlayback · useKeyboard
   api/ lib/ app/     server client · formatting · composition root
-test/                28 tests — signal, scheduler, formats, transport invariants, recorder ingest
-bench/               corrupt (validator proven failing) · stalled-consumer (R11) · write-stall (slow disk)
-tools/               independent_reader.py — the format spec, proven (deliberately not TypeScript)
+test/                30 tests — signal, scheduler, formats, transport invariants, recorder ingest, playback
+bench/               corrupt (validator shown failing) · stalled-consumer (frozen recorder) · write-stall (slow disk)
+tools/               independent_reader.py — written from docs/FORMAT.md alone, in Python so it shares no code
 docs/FORMAT.md       complete standalone specification
 scripts/demo.sh      builds the viewer if needed and opens it, ready to record
 ```
