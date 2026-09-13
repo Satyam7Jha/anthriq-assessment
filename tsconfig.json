@@ -1,21 +1,24 @@
 {
+  // Backend: acquisition, storage, verification, server, tests and benches.
+  // Node runs these .ts files directly (type stripping), so there is no build step: tsc only checks.
+  // erasableSyntaxOnly keeps every file runnable without a compiler — no enums, no namespaces, no
+  // parameter properties.
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
     "strict": true,
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true
   },
-  "include": ["ui/src"]
+  "include": ["bin", "src", "test", "bench", "ui/build.ts"]
 }

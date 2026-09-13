@@ -4,28 +4,28 @@
   "private": true,
   "description": "Continuous multi-channel biosignal acquisition, recording, retrieval and playback",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18"
   },
-  "type": "commonjs",
+  "type": "module",
   "bin": {
-    "sigctl": "bin/sigctl.js",
-    "sigval": "bin/sigval.js"
+    "sigctl": "bin/sigctl.ts",
+    "sigval": "bin/sigval.ts"
   },
   "scripts": {
-    "test": "node --test-concurrency=1 --test test/*.test.mjs",
-    "record": "node bin/recorder.js",
-    "generate": "node bin/generator.js",
-    "validate": "node bin/sigval.js",
-    "ui": "node bin/uiserver.js",
-    "ui:build": "node ui/build.mjs",
-    "ui:watch": "node ui/build.mjs --watch",
-    "typecheck": "tsc --noEmit",
+    "start": "node bin/uiserver.ts",
     "demo": "bash scripts/demo.sh",
-    "test:faults": "node bench/write-stall.mjs && node bench/stalled-consumer.mjs --stall 8 --duration 24",
-    "start": "node bin/uiserver.js"
+    "record": "node bin/recorder.ts",
+    "generate": "node bin/generator.ts",
+    "validate": "node bin/sigval.ts",
+    "test": "node --test-concurrency=1 --test test/*.test.ts",
+    "test:faults": "node bench/write-stall.ts && node bench/stalled-consumer.ts --stall 8 --duration 24",
+    "typecheck": "tsc -p tsconfig.json && tsc -p ui/tsconfig.json",
+    "ui:build": "node ui/build.ts",
+    "ui:watch": "node ui/build.ts --watch"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
+    "@types/node": "^24.13.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",

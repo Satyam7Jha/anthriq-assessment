@@ -1,21 +1,19 @@
-/** Wire types shared with bin/uiserver.js. */
+// The server contract (src/server/). Kept in one place so a server change shows up as a type error.
 
 export interface Marker {
-  kind: 'GAP' | 'RESYNC';
   onsetSeconds: number;
   durationSeconds: number;
-  startFrameIndex: number;
-  frameCount: number;
-  label: string;
+  cause: string;
 }
 
-/** What GET /api/meta returns before anything has been recorded. */
+/** GET /api/meta before anything has been recorded. */
 export interface EmptyMeta {
   empty: true;
   channelCount: number;
   sampleRateHz: number;
 }
 
+/** GET /api/meta for an open or finished recording. */
 export interface Meta {
   empty?: false;
   file: string;
@@ -23,36 +21,21 @@ export interface Meta {
   channelCount: number;
   sampleRateHz: number;
   dtype: string;
-  layout: string;
   totalFrames: number;
   totalValues: number;
+  /** One past the last frame index: the end of the timeline, gaps included. */
+  endFrame: number;
   durationSeconds: number;
   finalised: boolean;
-  hadDrops: boolean;
   signalId: string;
-  ringSeconds: number;
-  markers: Marker[];
   droppedValues: number;
-}
-
-export interface ChannelQuality {
-  rms: number;
-  peakToPeak: number;
-  flat: boolean;
-  railed: boolean;
+  markers: Marker[];
 }
 
 export interface RecorderHealth {
-  valuesReceived: number;
-  bytesWritten: number;
   ringFillPct: number;
-  ringPeakPct: number;
-  ringHeadroomSeconds: number;
-  ringLevel: 'NORMAL' | 'ELEVATED' | 'HIGH';
   writeLatencyMaxMs: number;
   droppedFrames: number;
-  droppedRanges: number;
-  crcFailures: number;
   rssBytes: number;
 }
 
@@ -65,22 +48,28 @@ export interface SeekCost {
 
 export interface TransportState {
   state: 'PLAYING' | 'PAUSED';
-  rateMultiplier: number;
   mode: 'live' | 'review';
+  rateMultiplier: number;
   position: number;
   seekCost?: SeekCost;
 }
 
+export type TransportCommand =
+  | { op: 'play' }
+  | { op: 'pause' }
+  | { op: 'rate'; multiplier: number }
+  | { op: 'seek'; frame: number }
+  | { op: 'mode'; mode: 'live' | 'review' };
+
 /** The JSON half of a binary frame from GET /api/frame. */
 export interface FrameInfo {
   from: number;
-  to: number;
   frames: number;
   columns: number;
   channels: number[];
-  quality: Record<string, ChannelQuality>;
   sampleRateHz: number;
   totalFrames: number;
+  endFrame: number;
   finalised: boolean;
   bytesRead: number;
   predictedBytes: number;
@@ -89,7 +78,7 @@ export interface FrameInfo {
   recorder: RecorderHealth | null;
 }
 
-/** The pixel half: channels.length x columns x [min, max], NaN where there is no data. */
+/** The pixel half: channels x columns x [min, max]; NaN where there is no data. */
 export interface Envelopes {
   channels: number[];
   columns: number;
@@ -97,7 +86,7 @@ export interface Envelopes {
 }
 
 export interface Validation {
-  exitCode: number;
+  exitCode: number | null;
   report: {
     result: string;
     expectedValues: number;
@@ -105,7 +94,6 @@ export interface Validation {
     missing: number;
     duplicated: number;
     incorrect: number;
-    ledgerAgreesWithDerivedGaps: boolean | null;
     elapsedSeconds: number;
   } | null;
   stderr: string;

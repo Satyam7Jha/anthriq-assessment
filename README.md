@@ -57,17 +57,17 @@ and verification run on a bare checkout with no install step.
 
 ```bash
 # 1. Recorder first — it owns the socket and the file.
-node bin/recorder.js --out /tmp/run.sigb --stats-interval 5
+node bin/recorder.ts --out /tmp/run.sigb --stats-interval 5
 ```
 
 ```bash
 # 2. Generator, in a second terminal. Two genuinely independent processes.
-node bin/generator.js --duration 60
+node bin/generator.ts --duration 60
 ```
 
 ```bash
 # 3. Ctrl-C the recorder to finalise, then verify. Exit status is the machine-checkable result.
-node bin/sigval.js /tmp/run.sigb; echo "exit=$?"
+node bin/sigval.ts /tmp/run.sigb; echo "exit=$?"
 ```
 
 ```
@@ -81,9 +81,9 @@ Result: PASS
 
 ```bash
 # 4. Inspect, retrieve, and view.
-node bin/sigctl.js info /tmp/run.sigb
-node bin/sigctl.js read /tmp/run.sigb --from 10s --to 12s --channels 3,17
-npm install && npm run ui:build && node bin/uiserver.js --follow /tmp/run.sigb   # then open :8787
+node bin/sigctl.ts info /tmp/run.sigb
+node bin/sigctl.ts read /tmp/run.sigb --from 10s --to 12s --channels 3,17
+npm install && npm run ui:build && node bin/uiserver.ts --follow /tmp/run.sigb   # then open :8787
 ```
 
 ---
@@ -158,7 +158,7 @@ the oldest block is dropped and its exact `(startFrameIndex, frameCount)` goes i
 
 ### The evidence
 
-`node bench/stalled-consumer.mjs --stall 10` runs the pair to steady state, **SIGSTOPs the recorder
+`node bench/stalled-consumer.ts --stall 10` runs the pair to steady state, **SIGSTOPs the recorder
 for ten seconds** — a total consumer stall, the process is not scheduled at all — and watches the
 generator:
 
@@ -340,7 +340,7 @@ values in one hour              460,800,000   ✓ matches the brief
 ## Verification
 
 ```bash
-node bin/sigval.js FILE.sigb            # 0 PASS · 1 FAIL · 2 PASS(TRUNCATED) · 3 UNREADABLE
+node bin/sigval.ts FILE.sigb            # 0 PASS · 1 FAIL · 2 PASS(TRUNCATED) · 3 UNREADABLE
 ```
 
 Single streaming pass, **O(1) memory**: one reused block buffer, one 64-byte header buffer, a 4-byte
@@ -359,7 +359,7 @@ would be reported as 128,000 "incorrect values" — technically true and diagnos
 
 ### The validator is demonstrated failing
 
-An always-PASS validator is indistinguishable from `exit 0`. `bench/corrupt.mjs` damages a good
+An always-PASS validator is indistinguishable from `exit 0`. `bench/corrupt.ts` damages a good
 recording four ways and asserts the class, the count **and the first position** of each:
 
 ```
@@ -381,10 +381,10 @@ failure. That is the case a checksum *cannot* catch, and the reason the value co
 ## Retrieval and playback
 
 ```bash
-node bin/sigctl.js info  FILE.sigb                                   # metadata
-node bin/sigctl.js read  FILE.sigb --from 10s --to 12s --channels 3,17 --out csv
-node bin/sigctl.js read  FILE.sigb --from "#400000" --to "1:30" --channels 0-7
-node bin/sigctl.js seek  FILE.sigb --at 0s,2.5s,600s                 # measured seek cost
+node bin/sigctl.ts info  FILE.sigb                                   # metadata
+node bin/sigctl.ts read  FILE.sigb --from 10s --to 12s --channels 3,17 --out csv
+node bin/sigctl.ts read  FILE.sigb --from "#400000" --to "1:30" --channels 0-7
+node bin/sigctl.ts seek  FILE.sigb --at 0s,2.5s,600s                 # measured seek cost
 ```
 
 Positions are addressable by **time or sample index** — `12.5s`, `#50000`, `1:30`, `250ms`.
@@ -537,10 +537,10 @@ so via a header flag.
 ### Reproducing the evidence
 
 ```bash
-npm test                                          # 25 tests: signal, scheduler, transport, recorder ingest
-node bench/write-stall.mjs                         # slow disk: loss reported as MISSING, 0 incorrect
-node bench/corrupt.mjs /tmp/run.sigb               # validator demonstrated FAILING, 4 classes
-node bench/stalled-consumer.mjs --stall 10         # R11: SIGSTOP the recorder, 7 assertions
+npm test                                          # 28 tests: signal, scheduler, formats, transport, recorder ingest
+node bench/write-stall.ts                         # slow disk: loss reported as MISSING, 0 incorrect
+node bench/corrupt.ts /tmp/run.sigb               # validator demonstrated FAILING, 4 classes
+node bench/stalled-consumer.ts --stall 10         # R11: SIGSTOP the recorder, 7 assertions
 python3 tools/independent_reader.py FILE.sigb --check --channels 3,17 --from 100 --to 102 --dump 3
 ```
 
@@ -578,7 +578,7 @@ priority first:
 1. **CLI flags** — `--channels 8 --rate 1000`
 2. **Environment** — `SIGACQ_CHANNELS=8 SIGACQ_RATE=1000`
 3. **JSON file** — `--config path.json`, or `./sigacq.config.json` if present
-4. **Built-in defaults** — `src/config/defaults.js`
+4. **Built-in defaults** — `src/config/defaults.ts`
 
 Every resolved value carries its **source**, and both processes print it at startup, so "where did
 this 4000 come from" never requires reading the code:
@@ -590,7 +590,7 @@ this 4000 come from" never requires reading the code:
   derived                32,000 values/s, 128,000 B/s, block stride 128,064 B
 ```
 
-Full option tables: `node bin/<tool>.js --help`.
+Full option tables: `node bin/<tool>.ts --help`.
 
 ---
 
@@ -620,9 +620,9 @@ and most serious, it missed — because the harness for that fault was specified
    slow disk the validator reported *0 missing, 1,021,440 incorrect*. For an instrument that is worse
    than losing data: a gap is visible, a time shift is not. My stall test had only ever frozen the
    recorder process, so every drop happened upstream in the generator and took the path that worked.
-   **Fix:** the ingest state machine now lives in `src/acquire/ingest.js`, measures every gap against
+   **Fix:** the ingest state machine now lives in `src/acquire/ingest.ts`, measures every gap against
    the last frame it actually *accepted*, and is unit-tested with frames that carry their own index as
-   their value. `bench/write-stall.mjs` reproduces the review's exact case and now reports
+   their value. `bench/write-stall.ts` reproduces the review's exact case and now reports
    **751,360 missing, 0 incorrect**, with the header ledger agreeing with the derived gaps.
 2. **`net.Socket.write()` does not copy the Buffer it is given.** Handing it a view into a reusable ring
    meant the socket sent whatever the slot held *at flush time*; under a 10-second consumer stall this
@@ -689,22 +689,36 @@ and a `setTimeout(0)` spin that libuv clamps to 1 ms.
 
 ## Repository map
 
+Everything is TypeScript. Node runs the backend `.ts` files directly (native type stripping), so
+acquisition, storage and verification still have **no build step and no runtime dependencies**;
+`npm run typecheck` checks the whole project. No file is large: entry points in `bin/` are thin, and
+each concern lives in its own module.
+
 ```
-bin/          generator · recorder · sigctl · sigval · uiserver      (the five processes)
-src/signal/   the deterministic signal. Pure, no I/O — shared by generator and validator
-src/format/   crc32c · wire · block-header · file-header · trailer   (the third-party contract)
-src/ring/     bounded byte ring (recorder) and block ring (generator)
-src/acquire/  absolute-deadline scheduler · recorder ingest state machine · bounded drop ledger
-src/store/    writer (transpose, one-write-in-flight) · reader (O(1) seek) · recover (truncation)
-src/viz/      min/max envelope decimation. Pure.
-ui/           React 19 + TypeScript + Tailwind 4; committed bundle in ui/dist
-test/         25 tests — signal determinism, scheduler algebra, transport invariants, recorder ingest
-bench/        corrupt.mjs (validator proven failing) · stalled-consumer.mjs (R11) · write-stall.mjs (slow disk)
-scripts/      demo.sh — builds the viewer if needed and opens it, ready to record
-tools/        independent_reader.py — the format spec, proven
-docs/         FORMAT.md — complete standalone specification
-PLAN.md       full architecture and rationale, including every rejected alternative
-MEASUREMENT-PLAN.md   measurement methodology, fault matrix, anti-patterns
+bin/                 thin entry points: generator · recorder · sigval · sigctl · uiserver
+src/
+  signal/            the deterministic signal — pure, shared by generator and validator
+  format/            crc32c · wire · wire-parser · block-header · file-header · trailer
+  ring/              bounded byte ring (recorder) · block ring (generator)
+  acquire/           absolute-deadline scheduler · lag histogram · recorder ingest · drop ledger
+  generator/         the generator process: hot path · non-blocking sender · report
+  recorder/          the recorder process: wiring · telemetry · metadata-first shutdown
+  store/             writer (one write in flight) · reader (O(1) seek) · recover (truncation)
+  verify/            streaming validator · output formatting
+  inspect/           sigctl subcommands: info · read · seek/hexdump
+  server/            viewer server: recording view · frames · transport · session · routes
+  viz/               min/max envelope decimation
+  config/ util/      layered configuration · argv parsing · formatting · logging
+ui/src/
+  components/ui/     the shared component library: Button · IconButton · SegmentedControl · Select · ListGroup · StatusIcon
+  features/          trace · transport · inspector · recording (toolbar, record button, empty state)
+  hooks/             useRecording · useSession · useFrameStream · usePlayback · useKeyboard
+  api/ lib/ app/     server client · formatting · composition root
+test/                28 tests — signal, scheduler, formats, transport invariants, recorder ingest
+bench/               corrupt (validator proven failing) · stalled-consumer (R11) · write-stall (slow disk)
+tools/               independent_reader.py — the format spec, proven (deliberately not TypeScript)
+docs/FORMAT.md       complete standalone specification
+scripts/demo.sh      builds the viewer if needed and opens it, ready to record
 ```
 
 ## Stated assumptions

@@ -9,4 +9,4 @@ if [ ! -f ui/dist/bundle.js ]; then
   echo "  building the viewer (one-off)…"
   npm install --silent && npm run ui:build --silent
 fi
-exec node bin/uiserver.js "$@"
+exec node bin/uiserver.ts "$@"
