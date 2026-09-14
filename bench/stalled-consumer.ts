@@ -1,4 +1,4 @@
-// R11: "a slow or stalled consumer must not make the generator fall behind."
+// "a slow or stalled consumer must not make the generator fall behind."
 //
 // SIGSTOP the recorder mid-run — a total stall, the process is not scheduled — and watch the
 // generator's pacing before, during and after. Loss must be positioned ranges, and the validator,

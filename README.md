@@ -11,6 +11,7 @@ automatically. It runs on Render's free tier, so the first request after a quiet
 a minute, and a shared fraction of a CPU is not the machine the figures below were measured on.
 
 **Platform developed and measured on:** macOS 26.5 (Darwin 25.5.0), Apple Silicon, Node.js v24.15.0.
+**Requires Node.js 22.18 or newer**, which runs the TypeScript sources directly.
 **Runtime dependencies: zero.** The acquisition, storage, retrieval and verification paths import
 nothing outside the Node standard library. Build-time dependencies (esbuild, TypeScript, Tailwind,
 React) exist only for the front-end bundle, which is committed — so `npm install` is not required to
@@ -76,8 +77,8 @@ node bin/sigval.ts /tmp/run.sigb; echo "exit=$?"
 ```
 
 ```
-Expected: 34,769,920 samples
-Recorded: 34,769,920 samples
+Expected: 7,680,000 samples
+Recorded: 7,680,000 samples
 Missing:   0
 Duplicated: 0
 Incorrect:  0
@@ -368,8 +369,8 @@ node bin/sigval.ts FILE.sigb            # 0 PASS · 1 FAIL · 2 PASS(TRUNCATED) 
 Single streaming pass, **O(1) memory**: one reused block buffer, one 64-byte header buffer, a 4-byte
 scratch, and a dozen counters. Neither the recording nor the expected signal is ever materialised —
 the expected signal is recomputed one value at a time from the closed-form function. Measured at
-**~90 M values/s with 86.7 MiB peak RSS**, flat across a 124× range of file sizes; a one-hour recording
-validates in about five seconds.
+**80–90 M values/s with 85–87 MiB peak RSS**, flat from a 4 MiB file to the 1.72 GiB one-hour recording,
+which validates in 5.8 seconds.
 
 `Missing` is derived from **sequence gaps**, not from `Expected − Recorded`, because those two can
 legitimately disagree (duplicates inflate `Recorded`) and reporting both makes the discrepancy itself
@@ -482,13 +483,13 @@ channel-subset economy — are all invisible in a terminal.** The front end make
 Two consequences for what got built.
 
 **It is a recognisable instrument, not a generic chart.** The canonical view for multi-channel ExG is
-a stacked column of per-channel traces sharing one time axis, with per-channel gain, a time base in
-seconds-per-screen, and a montage selector.
+a stacked column of per-channel traces sharing one time axis, with per-channel gain and a time base in
+seconds-per-screen.
 
 **The interface is quiet, and ordered for a reviewer.** One trace view, one transport
 bar, one inspector that answers questions in the order they get asked: *is the recording correct?*
-(Verify, at the top), *what is it?* (Recording), *is acquisition healthy?* (Health), *how much am I
-looking at?* (Channels shown: All · 16 · 8 · 4). Technical detail sits behind one disclosure. Rows
+(Verify, at the top), *what is it?* (Recording), *is acquisition healthy?* (Health). All channels are
+always on screen. Technical detail sits behind one disclosure. Rows
 auto-fit their own range, so there is no scale control and a trace can never spill into its neighbour.
 Three keys: Space plays or pauses, ← / → skip ten seconds. It is light-themed whatever the system
 setting, since dark traces on a light ground read best, and the only saturated colours are the
@@ -521,9 +522,10 @@ draws the eye.
   receives `[u32 length][JSON][float32 envelopes]`, read through a zero-copy `Float32Array` view — no
   base64, no per-byte decode, so nothing that needs a Worker. A slow tab simply asks less often; no
   backlog builds anywhere.
-- **Channel selection changes what leaves the disk**, not what the browser draws: the reader issues
-  `pread`s only for the selected channels, and the inspector footnote reports the saving and whether
-  the measured byte count matches the closed-form prediction.
+- **The server reads only the channels a frame asks for**: the reader issues `pread`s for those
+  channels alone, and the inspector's details report the bytes read per screen update and whether that
+  matches the closed-form prediction. The viewer shows every channel; the subset saving is measured in
+  [Retrieval and playback](#retrieval-and-playback).
 - **Lost samples are drawn, not just counted** — a soft red band across every row at the exact time.
 - **Verification runs as a separate process**, and its report is shown as the five checks it makes —
   sample values, sequence, checksums, drop log, clean close — with the first position of any failure
@@ -559,7 +561,8 @@ Darwin); memory uses `process.memoryUsage.rss()` sampled by the recorder itself.
 
 Recorder and generator started from the command line as in [Quick start](#quick-start), on AC power
 with idle sleep held off by `caffeinate`; recorder RSS sampled externally with `ps` every 10 s
-(359 samples); validator timed with `/usr/bin/time -l`.
+(359 samples); validator timed with `/usr/bin/time -l`. The raw logs are in
+[`artifacts/one-hour/`](artifacts/one-hour/), and `bash scripts/one-hour.sh` repeats the procedure.
 
 ```
 Expected: 460,800,000 samples
@@ -642,17 +645,18 @@ so via a header flag.
 |---|---|
 | Signal generation | 1.04 ms per 128,000 values (0.10 % of one core) |
 | CRC-32C | 0.99 ms per 518,400 B = **526 MB/s**; check value `0xE3069283` verified |
-| Validation | ~90 M values/s |
+| Validation | 80–90 M values/s (80 M on the one-hour file) |
 | Seek | ~11 µs, 1 pread, 64 B |
 | Trace redraw, 16 channels at 1440×900, 1× playback (uCharts) | 0.98 ms |
 
 ### Reproducing the evidence
 
 ```bash
-npm test                                          # 30 tests: signal, scheduler, formats, transport, ingest, playback
+npm test                                          # 37 tests: signal, scheduler, formats, transport, ingest, playback
 node bench/write-stall.ts                         # slow disk: loss reported as MISSING, 0 incorrect
 node bench/corrupt.ts /tmp/run.sigb               # validator demonstrated FAILING, 4 classes
-node bench/stalled-consumer.ts --stall 10         # R11: SIGSTOP the recorder, 7 assertions
+node bench/stalled-consumer.ts --stall 10         # SIGSTOP the recorder, 7 assertions
+bash scripts/one-hour.sh                          # one-hour acceptance run, logs kept in artifacts/
 python3 tools/independent_reader.py FILE.sigb --check --channels 3,17 --from 100 --to 102 --dump 3
 ```
 
@@ -823,14 +827,16 @@ src/
   config/ util/      layered configuration · argv parsing · formatting · logging
 ui/src/
   components/ui/     the shared component library: Button · IconButton · SegmentedControl · Select · ListGroup · StatusIcon
-  features/          trace · transport · inspector · recording (toolbar, record button, empty state)
+  features/          trace · transport · inspector · overview · recording (toolbar, record button, empty state)
   hooks/             useRecording · useSession · useFrameStream · usePlayback · useKeyboard
   api/ lib/ app/     server client · formatting · composition root
-test/                30 tests — signal, scheduler, formats, transport invariants, recorder ingest, playback
+test/                37 tests — signal, scheduler, formats, transport invariants, recorder ingest, playback
 bench/               corrupt (validator shown failing) · stalled-consumer (frozen recorder) · write-stall (slow disk)
+artifacts/           raw evidence: one-hour/ acceptance run logs · stalled-consumer.json · write-stall.json
 tools/               independent_reader.py — written from docs/FORMAT.md alone, in Python so it shares no code
 docs/FORMAT.md       complete standalone specification
 scripts/demo.sh      builds the viewer if needed and opens it, ready to record
+scripts/one-hour.sh  the one-hour acceptance run: records, samples recorder RSS, validates, keeps the logs
 ```
 
 ## Stated assumptions
