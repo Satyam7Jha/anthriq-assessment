@@ -1,0 +1,7 @@
+Expected: 460,800,000 samples
+Recorded: 460,800,000 samples
+Missing:   0
+Duplicated: 0
+Incorrect:  0
+Result: PASS
+exit=0

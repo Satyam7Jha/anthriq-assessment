@@ -1,0 +1,19 @@
+validated 460,800,000 values in 5.76 s (80,008,071 values/s), peak RSS 54.3 MiB, CRC on
+        5.83 real         5.58 user         0.21 sys
+            88981504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                6531  page reclaims
+                 170  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 142  voluntary context switches
+                7659  involuntary context switches
+        133036941968  instructions retired
+         24914965497  cycles elapsed
+            45681256  peak memory footprint

@@ -1,0 +1,93 @@
+{
+  "recordingId": "aabd0a34873db8c31b350ab508ca7c42",
+  "binaryFile": "hour.sigb",
+  "binarySizeBytes": 1843434520,
+  "headerCrc32c": 3295490103,
+  "format": {
+    "magic": "SIGBLK01",
+    "formatVersion": 1,
+    "layout": "BLOCK_PLANAR",
+    "dtype": "float32",
+    "byteOrder": "little-endian",
+    "blockStrideBytes": 512064
+  },
+  "acquisition": {
+    "channelCount": 32,
+    "sampleRateHz": 4000,
+    "totalFrames": 14400000,
+    "totalValues": 460800000,
+    "durationSeconds": 3600,
+    "startTimestampUnixNanos": "1789335423321000000",
+    "signalId": "tri+saw+hash32/v1",
+    "dither": true,
+    "finalised": true
+  },
+  "buffering": {
+    "ringBytes": 67108864,
+    "ringSeconds": 131.07,
+    "ringPeakPct": 0.76,
+    "overflowPolicy": "DROP_NEWEST_BLOCK",
+    "fsyncIntervalSeconds": 10
+  },
+  "integrity": {
+    "gapFrames": 0,
+    "duplicateFrames": 0,
+    "crcFailures": 0
+  },
+  "drops": {
+    "ledgerTruncated": false,
+    "totalDroppedFrames": 0,
+    "totalDroppedValues": 0,
+    "entries": []
+  },
+  "config": {
+    "channelCount": {
+      "value": 32,
+      "source": "default"
+    },
+    "sampleRateHz": {
+      "value": 4000,
+      "source": "default"
+    },
+    "dither": {
+      "value": true,
+      "source": "default"
+    },
+    "tickNanos": {
+      "value": 5000000,
+      "source": "default"
+    },
+    "framesPerBlock": {
+      "value": 4000,
+      "source": "default"
+    },
+    "ringBytes": {
+      "value": 67108864,
+      "source": "default"
+    },
+    "generatorRingBlocks": {
+      "value": 1024,
+      "source": "default"
+    },
+    "fsyncIntervalSeconds": {
+      "value": 10,
+      "source": "default"
+    },
+    "statsIntervalSeconds": {
+      "value": 10,
+      "source": "cli"
+    },
+    "socketPath": {
+      "value": "/tmp/sigacq-accept.sock",
+      "source": "cli"
+    },
+    "duration": {
+      "value": 0,
+      "source": "default"
+    },
+    "description": {
+      "value": "",
+      "source": "default"
+    }
+  }
+}

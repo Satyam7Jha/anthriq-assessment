@@ -1,0 +1,28 @@
+  file                   hour.sigb
+  size                   1,843,434,520 B  (1.7168 GiB)
+  format                 SIGBLK01 v1   header 4096 B   block header 64 B
+  recordingId            aabd0a34873db8c31b350ab508ca7c42
+
+  channelCount           32
+  sampleRateHz           4,000  (exact 4000)
+  dataType               float32  4 bytes/value  little-endian
+  layout                 BLOCK_PLANAR  (planar within a 4,000-frame block)
+  blockStrideBytes       512,064
+
+  totalFrames            14,400,000
+  totalValues (samples)  460,800,000
+  duration               3600.000000 s   (01:00:00.000)
+  blockCount             3,600
+  startTimestamp         2026-09-13T21:37:03.321Z  (1789335423321000000 ns unix)
+  endTimestamp           2026-09-13T22:37:08.347Z
+
+  finalised              yes
+  recoveryUsed           no
+  signalId               tri+saw+hash32/v1
+  ringBytes              67,108,864  (131.1 s of absorption)
+  fsyncInterval          10 s  (bounds data at risk on an unclean kill)
+  producer               sigacq 1.0.0 node-v24.15.0 darwin-arm64
+
+  droppedValues          0
+  ledgerEntries          0  source: header
+  sidecar                hour.json  recordingId matches
